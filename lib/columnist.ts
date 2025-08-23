@@ -11,6 +11,7 @@
 // Node.js compatibility (will be handled by build process)
 
 import { z } from "zod"
+import { SyncManager } from "./sync"
 
 type ColumnType = "string" | "number" | "boolean" | "date" | "json"
 
@@ -360,12 +361,14 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
   private vectorCache: Map<string, Float32Array> = new Map()
   private encryptionKey: CryptoKey | null = null
   private authHooks: Map<string, (operation: string, table: string, data?: any) => boolean> = new Map()
+  private syncManager: SyncManager | null = null
 
   private constructor(name: string, schema: SchemaDefinition, version: number, migrations?: Record<number, (db: IDBDatabase, tx: IDBTransaction, oldVersion: number) => void>) {
     this.name = name
     this.schema = schema
     this.version = version
     this.migrations = migrations
+    this.syncManager = new SyncManager(this)
   }
 
   static #instance: ColumnistDB | null = null
@@ -685,6 +688,9 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
       record: { ...(updatedRecord as any), id },
       oldRecord: { ...(oldRecord as any), id }
     })
+
+    // Track change for synchronization
+    this.trackSyncChange(tableName, 'update', { ...(updatedRecord as any), id })
   }
 
   async delete(id: number, table?: string): Promise<void> {
@@ -776,6 +782,9 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
       type: "delete", 
       record: { ...(deletedRecord as any), id }
     })
+
+    // Track change for synchronization
+    this.trackSyncChange(tableName, 'delete', { id })
   }
 
   async upsert<T extends Record<string, unknown>>(record: T, table?: string): Promise<InsertResult> {
@@ -892,6 +901,9 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
 
     // Notify subscribers
     this.notify(tableName, { table: tableName, type: "insert", record: { ...(record as any), id } })
+
+    // Track change for synchronization
+    this.trackSyncChange(tableName, 'insert', { ...(record as any), id })
 
     return { id }
   }
@@ -1808,6 +1820,62 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
       
       getAll: <K extends keyof S>(table: K, limit?: number) => 
         this.getAll(table as string, limit) as Promise<InferTableType<S[K]>[]>
+    }
+  }
+
+  // Sync methods
+  getSyncManager(): SyncManager {
+    if (!this.syncManager) {
+      this.syncManager = new SyncManager(this)
+    }
+    return this.syncManager
+  }
+
+  async registerSyncAdapter(name: string, type: 'firebase' | 'supabase' | 'rest', options: any): Promise<void> {
+    const { createSyncAdapter } = await import('./sync');
+    const adapter = createSyncAdapter(this, type, { ...options, name });
+    this.getSyncManager().registerAdapter(name, adapter);
+  }
+
+  async startSync(name?: string): Promise<void> {
+    if (name) {
+      const adapter = this.getSyncManager().getAdapter(name);
+      if (adapter) {
+        await adapter.start();
+      }
+    } else {
+      await this.getSyncManager().startAll();
+    }
+  }
+
+  stopSync(name?: string): void {
+    if (name) {
+      const adapter = this.getSyncManager().getAdapter(name);
+      if (adapter) {
+        adapter.stop();
+      }
+    } else {
+      this.getSyncManager().stopAll();
+    }
+  }
+
+  getSyncStatus(name?: string): any {
+    if (name) {
+      const adapter = this.getSyncManager().getAdapter(name);
+      return adapter ? adapter.getStatus() : null;
+    }
+    return this.getSyncManager().getStatus();
+  }
+
+  /**
+   * Track database changes for synchronization
+   */
+  private trackSyncChange(table: string, type: 'insert' | 'update' | 'delete', record: any): void {
+    if (!this.syncManager) return;
+    
+    // Notify all registered adapters of the change
+    for (const adapter of this.getSyncManager().getAllAdapters()) {
+      adapter.trackChange(table, type, record);
     }
   }
 
