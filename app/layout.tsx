@@ -4,14 +4,21 @@ import "./globals.css"
 import { NavBar } from "@/components/nav-bar"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AutoThemeProvider } from "@/components/auto-theme-provider"
+import { ClerkProvider } from "@clerk/nextjs"
 
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata = {
-  title: "Columnist.io - Lightning-Fast, Semantic-Ready Client-Side Database for Web Apps",
+  title: "Columnist.live - Lightning-Fast, Semantic-Ready Client-Side Database for Web Apps",
   description:
     "A columnar database for modern web apps—store, query, and sync data instantly with ultra-low memory usage and AI-powered search.",
-    generator: 'v0.app'
+  generator: 'v0.app'
+}
+
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
 }
 
 export default function RootLayout({
@@ -22,16 +29,20 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
-          <AutoThemeProvider />
-          <div className="min-h-screen flex flex-col">
-            <NavBar />
-            {children}
+        <ClerkProvider>
+          <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
+            <AutoThemeProvider />
+            <div className="min-h-screen flex flex-col">
+              <NavBar />
+              <main className="flex-1 w-full">
+                {children}
+              </main>
+            </div>
             <footer className="w-full border-t border-border py-8 bg-background">
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
                   <div>
-                    <h3 className="font-bold mb-4">Columnist.io</h3>
+                    <h3 className="font-bold mb-4">Columnist.live</h3>
                     <p className="text-sm text-muted-foreground">
                       Client-Side Data, Redefined.
                       <br />A lean, fast, semantic database for the modern web.
@@ -98,11 +109,11 @@ export default function RootLayout({
                     </ul>
                   </div>
                 </div>
-                <div className="mt-8 pt-8 border-t border-border flex flex-col md:flex-row justify-between items-center">
+                <div className="mt-8 pt-8 border-t border-border flex flex-col sm:flex-row justify-between items-center gap-4">
                   <p className="text-sm text-muted-foreground">
-                    © {new Date().getFullYear()} Columnist.io. All rights reserved.
+                    © {new Date().getFullYear()} Columnist.live. All rights reserved.
                   </p>
-                  <div className="flex space-x-4 mt-4 md:mt-0">
+                  <div className="flex flex-wrap gap-4 mt-4 sm:mt-0">
                     <a href="/terms" className="text-sm text-muted-foreground hover:text-foreground">
                       Terms
                     </a>
@@ -116,10 +127,9 @@ export default function RootLayout({
                 </div>
               </div>
             </footer>
-          </div>
-        </ThemeProvider>
+          </ThemeProvider>
+        </ClerkProvider>
       </body>
     </html>
   )
 }
-

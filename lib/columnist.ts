@@ -873,6 +873,7 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
     // Persist vector embedding if configured
     if (def.vector) {
       const embedder = this.vectorEmbedders.get(tableName)
+      console.log(`Looking for embedder for table: ${tableName}, found: ${!!embedder}`)
       if (embedder) {
         const source = (record as any)[def.vector.field]
         if (typeof source === "string" && source.trim().length > 0) {
@@ -882,6 +883,8 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
           }
           const vStore = tx.objectStore(vectorStoreName(tableName))
           await requestToPromise(vStore.put({ id, vector: Array.from(vec) }))
+          console.log("Stored vector for id:", id, "from text:", source.substring(0, 50))
+          console.log("Vector stored in store:", vectorStoreName(tableName))
         }
       }
     }
@@ -1166,6 +1169,7 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
   registerEmbedder(table: string, embedder: (input: string) => Promise<Float32Array>): void {
     this.ensureTable(table)
     this.vectorEmbedders.set(table, embedder)
+    console.log(`Embedder registered for table: ${table}`)
   }
 
   // Security audit: Check for potential security issues
@@ -1551,7 +1555,7 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
                 let score = 0
                 if (metric === "cosine") score = dot(inputVector, v) / (inputNorm * norm(v) || 1)
                 else if (metric === "dot") score = dot(inputVector, v)
-                else if (metric === "euclidean") score = -this.euclideanDistance(inputVector, v)
+                else if (metric === "euclidean") score = -euclideanDistance(inputVector, v)
 
                 results.push({ id, score })
                 
@@ -1574,32 +1578,40 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
 
     // Fallback to full scan if IVF is disabled or failed
     if (results.length === 0) {
+      console.log("Performing full vector scan...")
+      console.log("Vector store name:", vectorStoreName(table))
       await new Promise<void>((resolve, reject) => {
         const req = vStore.openCursor()
         req.onsuccess = async () => {
           const cursor = req.result
           if (!cursor) {
+            console.log("Vector scan completed, found", results.length, "vectors")
             resolve()
             return
           }
           const { id, vector } = cursor.value as { id: number; vector: number[] }
+          console.log("Processing vector for id:", id, "vector length:", vector.length)
           const v = new Float32Array(vector)
           let score = 0
           if (metric === "cosine") score = dot(inputVector, v) / (inputNorm * norm(v) || 1)
           else if (metric === "dot") score = dot(inputVector, v)
-          else if (metric === "euclidean") score = -Math.hypot(...inputVector.map((x, i) => x - v[i]))
+          else if (metric === "euclidean") score = -euclideanDistance(inputVector, v)
 
           results.push({ id, score })
           
           // Early termination for large datasets - stop after collecting 2x limit
           if (results.length >= limit * 3) {
+            console.log("Early termination at", results.length, "vectors")
             resolve()
             return
           }
           
           cursor.continue()
         }
-        req.onerror = () => reject(req.error)
+        req.onerror = () => {
+          console.error("Vector cursor error:", req.error)
+          reject(req.error)
+        }
       })
     }
 

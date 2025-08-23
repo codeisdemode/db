@@ -19,6 +19,10 @@ const testSchema = {
     .primaryKey("id")
     .searchable("content")
     .indexes("user_id", "timestamp", "priority")
+    .vector({
+      field: "content",
+      dims: 384
+    })
     .validate(z.object({
       id: z.number().optional(),
       user_id: z.number().min(1),
@@ -47,6 +51,7 @@ const testSchema = {
 
 // Mock embedder that returns random vectors (replace with real embedder)
 const mockEmbedder = async (text: string): Promise<Float32Array> => {
+  console.log('Mock embedder called with text:', text.substring(0, 50))
   // Simulate API call delay
   await new Promise(resolve => setTimeout(resolve, 100))
   
@@ -60,6 +65,8 @@ const mockEmbedder = async (text: string): Promise<Float32Array> => {
   for (let i = 0; i < 384; i++) {
     vector[i] = Math.sin(hash + i) * 0.5
   }
+  
+  console.log('Generated vector:', Array.from(vector.slice(0, 5)))
   return vector
 }
 
@@ -69,26 +76,38 @@ export default function TestPage() {
   const [newMessage, setNewMessage] = useState("")
   const [messages, setMessages] = useState<any[]>([])
   const [searchResults, setSearchResults] = useState<any[]>([])
-  const [vectorResults, setVectorResults] = useState<any[]>([])
+  const [vectorResults, setVectorResults] = useState<any>({
+    cosine: [],
+    dot: [],
+    euclidean: []
+  })
   const [stats, setStats] = useState<any>(null)
   const [exportData, setExportData] = useState("")
 
   // Initialize database
   useEffect(() => {
     let db: any
+    let initialized = false
     
     const initDb = async () => {
+      if (initialized) return
+      initialized = true
+      
       try {
         setDbStatus("Initializing database...")
         
         // Initialize with schema
         db = await Columnist.init("columnist-test", {
           schema: testSchema,
-          version: 1
+          version: 2
         })
         
         // Register mock embedder for vector search
         db.registerEmbedder("messages", mockEmbedder)
+        console.log('Mock embedder registered for messages table')
+        
+        // Small delay to ensure embedder is properly registered
+        await new Promise(resolve => setTimeout(resolve, 100))
         
         setDbStatus("Database initialized successfully!")
         
@@ -99,9 +118,18 @@ export default function TestPage() {
         })
         
         // Load initial data
-        await loadInitialData()
+        await loadInitialData(db)
         await loadMessages()
         await loadStats()
+        
+        // Build IVF index for better vector search performance
+        try {
+          await db.buildIVFIndex("messages", 8)
+          setDbStatus("Database initialized with IVF index!")
+        } catch (error) {
+          console.warn("IVF index building failed:", error)
+          setDbStatus("Database initialized (IVF index not available)")
+        }
         
         return () => unsubscribe()
       } catch (error: any) {
@@ -113,9 +141,8 @@ export default function TestPage() {
     initDb()
   }, [])
 
-  const loadInitialData = async () => {
+  const loadInitialData = async (db: any) => {
     try {
-      const db = Columnist.getDB()
       
       // Insert test users
       await db.insert({
@@ -203,16 +230,66 @@ export default function TestPage() {
       })
       setSearchResults(textResults)
       
-      // Vector search
+      // Vector search with different metrics
       const queryVector = await mockEmbedder(searchTerm)
-      const vecResults = await db.vectorSearch("messages", queryVector, {
+      console.log("Query vector generated:", Array.from(queryVector.slice(0, 5)))
+      
+      // Debug: Check if vectors exist in the database
+      const vectorDb = Columnist.getDB()
+      try {
+        // Use direct IndexedDB access to check vector store
+        const tx = vectorDb.db.transaction(["_vec_messages"], "readonly")
+        const store = tx.objectStore("_vec_messages")
+        const countRequest = store.count()
+        const count = await new Promise<number>((resolve, reject) => {
+          countRequest.onsuccess = () => resolve(countRequest.result)
+          countRequest.onerror = () => reject(countRequest.error)
+        })
+        console.log("Vectors in database:", count)
+        
+        // Get all vectors for detailed inspection
+        const allVectorsRequest = store.getAll()
+        const allVectors = await new Promise<any[]>((resolve, reject) => {
+          allVectorsRequest.onsuccess = () => resolve(allVectorsRequest.result)
+          allVectorsRequest.onerror = () => reject(allVectorsRequest.error)
+        })
+        
+        if (allVectors.length > 0) {
+          console.log("First vector:", allVectors[0])
+          console.log("Vector dimensions:", allVectors[0].vector.length)
+          console.log("Vector values (first 5):", allVectors[0].vector.slice(0, 5))
+        }
+      } catch (error) {
+        console.log("Error checking vector store:", error)
+      }
+      
+      const cosineResults = await db.vectorSearch("messages", queryVector, {
         limit: 5,
         metric: "cosine"
       })
-      setVectorResults(vecResults)
+      console.log("Cosine results:", cosineResults)
       
-      setDbStatus(`Search completed: ${textResults.length} text results, ${vecResults.length} vector results`)
+      const dotResults = await db.vectorSearch("messages", queryVector, {
+        limit: 5,
+        metric: "dot"
+      })
+      console.log("Dot results:", dotResults)
+      
+      const euclideanResults = await db.vectorSearch("messages", queryVector, {
+        limit: 5,
+        metric: "euclidean"
+      })
+      console.log("Euclidean results:", euclideanResults)
+      
+      setVectorResults({
+        cosine: cosineResults,
+        dot: dotResults,
+        euclidean: euclideanResults
+      })
+      
+      setDbStatus(`Search completed: ${textResults.length} text results, ${cosineResults.length} vector results`)
     } catch (error: any) {
+      console.error("Search error:", error)
       setDbStatus(`Search error: ${error.message}`)
     }
   }
@@ -235,8 +312,34 @@ export default function TestPage() {
       await loadMessages()
       await loadStats()
       setDbStatus("Database cleared!")
+      
+      // Reload test data
+      await loadInitialData()
     } catch (error: any) {
       setDbStatus(`Clear error: ${error.message}`)
+    }
+  }
+
+  const checkVectorStore = async () => {
+    try {
+      const db = Columnist.getDB()
+      // Use a test vector to see if any vectors exist
+      const testVector = new Float32Array(384)
+      for (let i = 0; i < 384; i++) {
+        testVector[i] = Math.random() * 0.1
+      }
+      
+      const results = await db.vectorSearch("messages", testVector, {
+        metric: "cosine",
+        limit: 1
+      })
+      
+      console.log('Vector store check results:', results.length)
+      setDbStatus(`Vector search returned ${results.length} results`)
+      
+    } catch (error: any) {
+      console.error('Error checking vector store:', error)
+      setDbStatus(`Error: ${error.message}`)
     }
   }
 
@@ -284,10 +387,10 @@ export default function TestPage() {
             <Button onClick={performSearch}>Search</Button>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             <div>
               <h4 className="font-semibold mb-2">Full-Text Search Results ({searchResults.length})</h4>
-              <div className="space-y-2 max-h-60 overflow-auto">
+              <div className="space-y-2 max-h-40 overflow-auto">
                 {searchResults.map((result, i) => (
                   <div key={i} className="p-2 bg-muted rounded text-sm">
                     <div className="font-mono text-xs text-muted-foreground">Score: {result.score.toFixed(3)}</div>
@@ -297,15 +400,41 @@ export default function TestPage() {
               </div>
             </div>
             
-            <div>
-              <h4 className="font-semibold mb-2">Vector Search Results ({vectorResults.length})</h4>
-              <div className="space-y-2 max-h-60 overflow-auto">
-                {vectorResults.map((result, i) => (
-                  <div key={i} className="p-2 bg-muted rounded text-sm">
-                    <div className="font-mono text-xs text-muted-foreground">Similarity: {result.score.toFixed(3)}</div>
-                    <div>{result.content}</div>
-                  </div>
-                ))}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <h4 className="font-semibold mb-2">Cosine Similarity ({vectorResults.cosine.length})</h4>
+                <div className="space-y-2 max-h-40 overflow-auto">
+                  {vectorResults.cosine.map((result: any, i: number) => (
+                    <div key={i} className="p-2 bg-muted rounded text-sm">
+                      <div className="font-mono text-xs text-muted-foreground">Score: {result.score.toFixed(3)}</div>
+                      <div>{result.content}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              <div>
+                <h4 className="font-semibold mb-2">Dot Product ({vectorResults.dot.length})</h4>
+                <div className="space-y-2 max-h-40 overflow-auto">
+                  {vectorResults.dot.map((result: any, i: number) => (
+                    <div key={i} className="p-2 bg-muted rounded text-sm">
+                      <div className="font-mono text-xs text-muted-foreground">Score: {result.score.toFixed(3)}</div>
+                      <div>{result.content}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              <div>
+                <h4 className="font-semibold mb-2">Euclidean Distance ({vectorResults.euclidean.length})</h4>
+                <div className="space-y-2 max-h-40 overflow-auto">
+                  {vectorResults.euclidean.map((result: any, i: number) => (
+                    <div key={i} className="p-2 bg-muted rounded text-sm">
+                      <div className="font-mono text-xs text-muted-foreground">Distance: {(-result.score).toFixed(3)}</div>
+                      <div>{result.content}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -372,6 +501,7 @@ export default function TestPage() {
           <div className="flex gap-2">
             <Button onClick={exportDatabase}>Export Database</Button>
             <Button variant="destructive" onClick={clearDatabase}>Clear Database</Button>
+            <Button variant="outline" onClick={checkVectorStore}>Check Vector Store</Button>
           </div>
           {exportData && (
             <Textarea

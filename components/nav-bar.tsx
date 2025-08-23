@@ -5,6 +5,10 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Menu, Github } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { UserButton } from "@/components/auth/user-button"
+import { SignInButton } from "@/components/auth/sign-in-button"
+import { SignUpButton } from "@/components/auth/sign-up-button"
+import { SignedIn, SignedOut } from "@clerk/nextjs"
 
 export function NavBar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -16,7 +20,7 @@ export function NavBar() {
           <div className="flex items-center">
             <Link href="/" className="flex-shrink-0 flex items-center">
               <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/80">
-                Columnist.io
+                Columnist.live
               </span>
             </Link>
           </div>
@@ -48,12 +52,13 @@ export function NavBar() {
             <Link href="https://github.com/columnist-io" className="text-foreground hover:text-primary">
               <Github className="h-5 w-5" />
             </Link>
-            <Button variant="outline" asChild>
-              <Link href="/login">Sign In</Link>
-            </Button>
-            <Button variant="default" asChild>
-              <Link href="/signup">Start Free</Link>
-            </Button>
+            <SignedOut>
+              <SignInButton />
+              <SignUpButton />
+            </SignedOut>
+            <SignedIn>
+              <UserButton />
+            </SignedIn>
           </div>
 
           {/* Mobile menu button */}
@@ -67,37 +72,44 @@ export function NavBar() {
 
       {/* Mobile menu */}
       {isMenuOpen && (
-        <div className="md:hidden">
-          <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
-            <Link href="/test" className="block px-3 py-2 rounded-md text-base font-medium hover:bg-muted">
+        <div className="md:hidden bg-background border-t border-border shadow-lg">
+          <div className="px-4 pt-2 pb-4 space-y-1">
+            <Link href="/test" className="block px-3 py-3 rounded-md text-base font-medium hover:bg-muted transition-colors" onClick={() => setIsMenuOpen(false)}>
               Demo
             </Link>
-            <Link href="/devtools" className="block px-3 py-2 rounded-md text-base font-medium hover:bg-muted">
+            <Link href="/devtools" className="block px-3 py-3 rounded-md text-base font-medium hover:bg-muted transition-colors" onClick={() => setIsMenuOpen(false)}>
               Devtools
             </Link>
-            <Link href="/docs" className="block px-3 py-2 rounded-md text-base font-medium hover:bg-muted">
+            <Link href="/docs" className="block px-3 py-3 rounded-md text-base font-medium hover:bg-muted transition-colors" onClick={() => setIsMenuOpen(false)}>
               Documentation
             </Link>
-            <Link href="/examples" className="block px-3 py-2 rounded-md text-base font-medium hover:bg-muted">
+            <Link href="/examples" className="block px-3 py-3 rounded-md text-base font-medium hover:bg-muted transition-colors" onClick={() => setIsMenuOpen(false)}>
               Examples
             </Link>
-            <Link href="/pricing" className="block px-3 py-2 rounded-md text-base font-medium hover:bg-muted">
+            <Link href="/pricing" className="block px-3 py-3 rounded-md text-base font-medium hover:bg-muted transition-colors" onClick={() => setIsMenuOpen(false)}>
               Pricing
             </Link>
-            <Link href="/blog" className="block px-3 py-2 rounded-md text-base font-medium hover:bg-muted">
+            <Link href="/blog" className="block px-3 py-3 rounded-md text-base font-medium hover:bg-muted transition-colors" onClick={() => setIsMenuOpen(false)}>
               Blog
             </Link>
-            <div className="pt-4 pb-3 border-t border-border">
+            <div className="pt-4 pb-2 border-t border-border">
               <div className="flex items-center justify-center px-3 mb-4">
                 <ThemeToggle />
               </div>
-              <div className="flex items-center px-3 gap-4">
-                <Button variant="outline" className="w-full" asChild>
-                  <Link href="/login">Sign In</Link>
-                </Button>
-                <Button variant="default" className="w-full" asChild>
-                  <Link href="/signup">Start Free</Link>
-                </Button>
+              <div className="flex flex-col items-center px-3 gap-3">
+                <SignedOut>
+                  <div className="w-full">
+                    <SignInButton onClick={() => setIsMenuOpen(false)} />
+                  </div>
+                  <div className="w-full">
+                    <SignUpButton onClick={() => setIsMenuOpen(false)} />
+                  </div>
+                </SignedOut>
+                <SignedIn>
+                  <div className="w-full flex justify-center">
+                    <UserButton />
+                  </div>
+                </SignedIn>
               </div>
             </div>
           </div>

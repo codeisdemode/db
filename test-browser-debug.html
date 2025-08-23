@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Vector Search Debug</title>
+    <script src="https://unpkg.com/fake-indexeddb@4.0.0/build/fake-indexeddb.js"></script>
+    <script type="module">
+        // Mock browser environment
+        if (typeof window === 'undefined') {
+            window = {};
+        }
+        if (typeof indexedDB === 'undefined') {
+            indexedDB = fakeIndexedDB;
+        }
+        if (typeof IDBKeyRange === 'undefined') {
+            IDBKeyRange = fakeIDBKeyRange;
+        }
+
+        // Import the library
+        import('./dist/lib/columnist.js').then(({ Columnist }) => {
+            async function testVectorSearch() {
+                console.log('Testing vector search in browser environment...');
+                
+                try {
+                    // Simple schema
+                    const schema = {
+                        test_docs: {
+                            columns: {
+                                id: "number",
+                                content: "string",
+                                timestamp: "date"
+                            },
+                            primaryKey: "id",
+                            searchableFields: ["content"],
+                            vector: {
+                                field: "content",
+                                dims: 3
+                            }
+                        }
+                    };
+
+                    const db = await Columnist.init('browser-debug-test', { schema, version: 1 });
+                    
+                    // Simple mock embedder
+                    const mockEmbedder = async (text) => {
+                        console.log('Embedder called with:', text);
+                        const vec = new Float32Array(3);
+                        vec[0] = text.length * 0.1;
+                        vec[1] = text.includes('test') ? 0.8 : 0.2;
+                        vec[2] = text.includes('vector') ? 0.7 : 0.3;
+                        console.log('Generated vector:', Array.from(vec));
+                        return vec;
+                    };
+
+                    db.registerEmbedder("test_docs", mockEmbedder);
+
+                    // Insert test data
+                    console.log('Inserting test documents...');
+                    const testDocs = [
+                        { content: "This is a test document", timestamp: new Date() },
+                        { content: "Another test for vectors", timestamp: new Date() }
+                    ];
+
+                    for (const doc of testDocs) {
+                        const result = await db.insert(doc, "test_docs");
+                        console.log('Inserted:', result.id, doc.content);
+                    }
+
+                    // Test vector search
+                    console.log('Testing vector search...');
+                    const queryVector = await mockEmbedder("test vector");
+                    const results = await db.vectorSearch("test_docs", queryVector, {
+                        metric: "cosine",
+                        limit: 5
+                    });
+
+                    console.log('Vector search results:', results);
+                    
+                } catch (error) {
+                    console.error('Error in browser vector test:', error);
+                }
+            }
+
+            testVectorSearch();
+        }).catch(error => {
+            console.error('Failed to load library:', error);
+        });
+    </script>
+</head>
+<body>
+    <h1>Vector Search Debug</h1>
+    <p>Check browser console for output...</p>
+</body>
+</html>

@@ -93,7 +93,7 @@ export default function Home() {
   return (
     <main className="flex min-h-screen flex-col items-center">
       {/* Hero Section */}
-      <section className="w-full py-20 md:py-32 flex flex-col items-center justify-center text-center px-4 bg-gradient-to-b from-background to-muted/30 relative overflow-hidden">
+      <section className="w-full py-16 md:py-32 flex flex-col items-center justify-center text-center px-4 sm:px-6 bg-gradient-to-b from-background to-muted/30 relative overflow-hidden">
         {/* Animated background elements */}
         <div className="absolute inset-0 overflow-hidden">
           <div
@@ -122,21 +122,21 @@ export default function Home() {
         </div>
 
         {/* Content */}
-        <div className="relative z-10 max-w-4xl">
+        <div className="relative z-10 w-full max-w-4xl mx-auto px-4 sm:px-6">
           <div className="inline-block mb-6 px-4 py-1.5 bg-primary/10 rounded-full text-primary font-medium text-sm">
             Lightning-Fast, Semantic-Ready Client-Side Database
           </div>
 
-          <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-6 gradient-text">
-            A columnar database for <br className="hidden md:block" />
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-6 gradient-text">
+            A columnar database for <br className="hidden sm:block" />
             modern web apps
           </h1>
 
-          <p className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto mb-10">
+          <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto mb-8 md:mb-10">
             Store, query, and sync data instantly with ultra-low memory usage and AI-powered search.
           </p>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12 md:mb-16">
             <Button size="lg" className="group" asChild>
               <Link href="#">
                 Start Free Now
@@ -150,7 +150,7 @@ export default function Home() {
           </div>
 
           {/* Code example */}
-          <div className="w-full max-w-2xl mx-auto relative">
+          <div className="w-full max-w-2xl mx-auto px-4 sm:px-6 relative">
             <div className="absolute -inset-1 bg-gradient-to-r from-primary/20 to-primary/10 rounded-xl blur-sm"></div>
             <div className="relative">
               <CodeBlock code={heroCode} />
@@ -160,11 +160,11 @@ export default function Home() {
       </section>
 
       {/* Why Columnist Section */}
-      <section className="w-full py-20 px-4 bg-background">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">Why Columnist?</h2>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+      <section className="w-full py-16 md:py-20 px-4 sm:px-6 bg-background">
+        <div className="w-full max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-12 md:mb-16">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4">Why Columnist?</h2>
+            <p className="text-lg sm:text-xl text-muted-foreground max-w-3xl mx-auto">
               Modern apps need speed, smarts, and simplicity. Columnist delivers with a lean, in-memory columnar index
               and optional cloud sync—perfect for offline-first, AI-driven, and real-time web experiences.
             </p>
@@ -199,11 +199,11 @@ export default function Home() {
       </section>
 
       {/* How it Works Section */}
-      <section className="w-full py-20 px-4 gradient-bg">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">How It Works</h2>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+      <section className="w-full py-16 md:py-20 px-4 sm:px-6 gradient-bg">
+        <div className="w-full max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-12 md:mb-16">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4">How It Works</h2>
+            <p className="text-lg sm:text-xl text-muted-foreground max-w-3xl mx-auto">
               Columnist combines advanced Lean Indexed Orchestration with columnar storage to power your app
               efficiently.
             </p>
@@ -284,11 +284,11 @@ export default function Home() {
       </section>
 
       {/* Features Section */}
-      <section className="w-full py-20 px-4 bg-background">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">Features You'll Love</h2>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+      <section className="w-full py-16 md:py-20 px-4 sm:px-6 bg-background">
+        <div className="w-full max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-12 md:mb-16">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4">Features You'll Love</h2>
+            <p className="text-lg sm:text-xl text-muted-foreground max-w-3xl mx-auto">
               Everything you need for fast, smart, and scalable data management.
             </p>
           </div>
@@ -322,11 +322,11 @@ export default function Home() {
       </section>
 
       {/* Built for Developers Section */}
-      <section className="w-full py-20 px-4 gradient-bg">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">Built for Developers</h2>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+      <section className="w-full py-16 md:py-20 px-4 sm:px-6 gradient-bg">
+        <div className="w-full max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-12 md:mb-16">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4">Built for Developers</h2>
+            <p className="text-lg sm:text-xl text-muted-foreground max-w-3xl mx-auto">
               Simple APIs, powerful integrations—Columnist fits how you work.
             </p>
           </div>
@@ -363,11 +363,11 @@ export default function Home() {
       </section>
 
       {/* Use Cases Section */}
-      <section className="w-full py-20 px-4 bg-background">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">Use Cases</h2>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+      <section className="w-full py-16 md:py-20 px-4 sm:px-6 bg-background">
+        <div className="w-full max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-12 md:mb-16">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4">Use Cases</h2>
+            <p className="text-lg sm:text-xl text-muted-foreground max-w-3xl mx-auto">
               Columnist is perfect for a wide range of modern web applications.
             </p>
           </div>
@@ -391,11 +391,11 @@ export default function Home() {
       </section>
 
       {/* Comparative Advantages Section */}
-      <section className="w-full py-20 px-4 bg-background">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">Why Columnist Stands Out</h2>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+      <section className="w-full py-16 md:py-20 px-4 sm:px-6 bg-background">
+        <div className="w-full max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-12 md:mb-16">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4">Why Columnist Stands Out</h2>
+            <p className="text-lg sm:text-xl text-muted-foreground max-w-3xl mx-auto">
               Columnist blends client-side power with AI-ready smarts—no compromises.
             </p>
           </div>
@@ -416,10 +416,10 @@ export default function Home() {
       </section>
 
       {/* CTA Section */}
-      <section className="w-full py-20 px-4 bg-primary/10">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-3xl md:text-4xl font-bold mb-6">Get Started Today</h2>
-          <p className="text-xl text-muted-foreground mb-10">
+      <section className="w-full py-16 md:py-20 bg-primary/10">
+        <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 text-center">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-6">Get Started Today</h2>
+          <p className="text-lg sm:text-xl text-muted-foreground mb-8 md:mb-10">
             Integrate Columnist in minutes and turbocharge your app.
           </p>
 

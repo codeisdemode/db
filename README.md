@@ -471,4 +471,4 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 
 ## License
 
-MIT © [Columnist.io](https://columnist.io)
+MIT © [Columnist.live](https://columnist.live)
