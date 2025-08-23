@@ -3,6 +3,7 @@ import { Inter } from "next/font/google"
 import "./globals.css"
 import { NavBar } from "@/components/nav-bar"
 import { ThemeProvider } from "@/components/theme-provider"
+import { AutoThemeProvider } from "@/components/auto-theme-provider"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -22,6 +23,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
+          <AutoThemeProvider />
           <div className="min-h-screen flex flex-col">
             <NavBar />
             {children}

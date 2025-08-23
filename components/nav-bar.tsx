@@ -4,6 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Menu, Github } from "lucide-react"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 export function NavBar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -43,6 +44,7 @@ export function NavBar() {
           </div>
 
           <div className="hidden md:flex md:items-center md:space-x-4">
+            <ThemeToggle />
             <Link href="https://github.com/columnist-io" className="text-foreground hover:text-primary">
               <Github className="h-5 w-5" />
             </Link>
@@ -86,6 +88,9 @@ export function NavBar() {
               Blog
             </Link>
             <div className="pt-4 pb-3 border-t border-border">
+              <div className="flex items-center justify-center px-3 mb-4">
+                <ThemeToggle />
+              </div>
               <div className="flex items-center px-3 gap-4">
                 <Button variant="outline" className="w-full" asChild>
                   <Link href="/login">Sign In</Link>

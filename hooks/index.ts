@@ -15,3 +15,5 @@ export {
   type TableStats,
   type OverallStats 
 } from "./use-stats"
+
+export { useAutoTheme } from "./use-auto-theme"
