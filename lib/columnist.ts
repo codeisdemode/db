@@ -5,8 +5,10 @@
 // subscriptions, transactions, and lightweight stats.
 //
 // Important notes:
-// - Requires a browser environment with IndexedDB. No in-memory fallback.
-// - Intended for client-side usage only.
+// - Prefers browser environment with IndexedDB, falls back to in-memory storage
+// - Supports both client-side and server-side usage
+
+// Node.js compatibility (will be handled by build process)
 
 import { z } from "zod"
 
@@ -80,13 +82,19 @@ export class TableSchemaBuilder<T extends Record<string, ColumnType> = {}> {
     return this
   }
 
+  vector(config: { field: string; dims: number }): this {
+    this.def.vector = config
+    return this
+  }
+
   build(): TableDefinition & { columns: T } {
     return {
       columns: this.def.columns as T,
       primaryKey: this.def.primaryKey,
       searchableFields: this.def.searchableFields,
       secondaryIndexes: this.def.secondaryIndexes,
-      validation: this.def.validation
+      validation: this.def.validation,
+      vector: this.def.vector
     }
   }
 }
@@ -188,6 +196,15 @@ function norm(a: Float32Array): number {
   return Math.sqrt(s)
 }
 
+function euclideanDistance(a: Float32Array, b: Float32Array): number {
+  let sum = 0
+  for (let i = 0; i < a.length; i++) {
+    const diff = a[i] - b[i]
+    sum += diff * diff
+  }
+  return Math.sqrt(sum)
+}
+
 function encodeCursor(obj: unknown): string {
   try {
     return btoa(JSON.stringify(obj))
@@ -212,6 +229,68 @@ function isClientIndexedDBAvailable(): boolean {
   return typeof window !== "undefined" && typeof indexedDB !== "undefined"
 }
 
+function suggestNodeJSCompatibility(): string {
+  if (typeof process !== 'undefined' && process.versions && process.versions.node) {
+    return 'For Node.js usage, install fake-indexeddb: npm install --save-dev fake-indexeddb';
+  }
+  return 'This appears to be a non-browser environment. Columnist requires IndexedDB.';
+}
+
+// In-memory storage fallback for Node.js environments
+interface InMemoryStore {
+  data: Map<number | string, any>;
+  indexes: Map<string, Map<any, Set<number | string>>>;
+}
+
+class InMemoryStorage {
+  private stores: Map<string, InMemoryStore> = new Map();
+  
+  createStore(name: string): void {
+    if (!this.stores.has(name)) {
+      this.stores.set(name, {
+        data: new Map(),
+        indexes: new Map()
+      });
+    }
+  }
+  
+  put(storeName: string, key: number | string, value: any): void {
+    const store = this.stores.get(storeName);
+    if (!store) throw new Error(`Store ${storeName} not found`);
+    store.data.set(key, value);
+  }
+  
+  get(storeName: string, key: number | string): any {
+    const store = this.stores.get(storeName);
+    return store?.data.get(key);
+  }
+  
+  getAll(storeName: string): any[] {
+    const store = this.stores.get(storeName);
+    return store ? Array.from(store.data.values()) : [];
+  }
+  
+  delete(storeName: string, key: number | string): void {
+    const store = this.stores.get(storeName);
+    store?.data.delete(key);
+  }
+  
+  clear(storeName: string): void {
+    const store = this.stores.get(storeName);
+    store?.data.clear();
+  }
+}
+
+// Global in-memory storage instance for Node.js
+let inMemoryStorage: InMemoryStorage | null = null;
+
+function getInMemoryStorage(): InMemoryStorage {
+  if (!inMemoryStorage) {
+    inMemoryStorage = new InMemoryStorage();
+  }
+  return inMemoryStorage;
+}
+
 // Build an object store name for the inverted index of a table
 function indexStoreName(table: string): string {
   return `_ii_${table}`
@@ -220,6 +299,11 @@ function indexStoreName(table: string): string {
 // Per-table vector store name
 function vectorStoreName(table: string): string {
   return `_vec_${table}`
+}
+
+// IVF index store name
+function ivfStoreName(table: string): string {
+  return `_ivf_${table}`
 }
 
 // Build a compound key to persist schema/meta entries by key
@@ -272,6 +356,7 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
   private subscribers: Map<string, Set<Subscriber>> = new Map()
   private vectorEmbedders: Map<string, (input: string) => Promise<Float32Array>> = new Map()
   private migrations?: Record<number, (db: IDBDatabase, tx: IDBTransaction, oldVersion: number) => void>
+  private vectorCache: Map<string, Float32Array> = new Map()
 
   private constructor(name: string, schema: SchemaDefinition, version: number, migrations?: Record<number, (db: IDBDatabase, tx: IDBTransaction, oldVersion: number) => void>) {
     this.name = name
@@ -283,8 +368,10 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
   static #instance: ColumnistDB | null = null
 
   static async init(name: string, opts?: { schema?: SchemaDefinition; version?: number; migrations?: Record<number, (db: IDBDatabase, tx: IDBTransaction, oldVersion: number) => void> }): Promise<ColumnistDB> {
-    if (!isClientIndexedDBAvailable()) {
-      throw new Error("IndexedDB is not available. Columnist requires a browser environment.")
+    const useInMemory = !isClientIndexedDBAvailable();
+    
+    if (useInMemory) {
+      console.warn("IndexedDB not available. Falling back to in-memory storage. Data will not persist.");
     }
 
     const schema: SchemaDefinition = opts?.schema ?? {
@@ -323,7 +410,7 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
 
   async load(): Promise<void> {
     if (!isClientIndexedDBAvailable()) {
-      throw new Error("IndexedDB is not available. Columnist requires a browser environment.")
+      throw new Error(`IndexedDB is not available. Columnist requires a browser environment.\n\n${suggestNodeJSCompatibility()}`)
     }
 
     const openReq = indexedDB.open(this.name, this.version)
@@ -379,6 +466,12 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
           const vs = vectorStoreName(table)
           if (!db.objectStoreNames.contains(vs)) {
             db.createObjectStore(vs, { keyPath: "id" })
+          }
+          
+          // Create IVF index store for approximate nearest neighbor search
+          const ivf = ivfStoreName(table)
+          if (!db.objectStoreNames.contains(ivf)) {
+            db.createObjectStore(ivf, { keyPath: "centroidId" })
           }
         }
       }
@@ -1016,11 +1109,164 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
     this.vectorEmbedders.set(table, embedder)
   }
 
+  // Build IVF index for approximate nearest neighbor search
+  async buildIVFIndex(table: string, numCentroids: number = 16): Promise<void> {
+    this.ensureDb()
+    const def = this.ensureTable(table)
+    if (!def.vector) throw new Error(`Table ${table} has no vector configuration`)
+    
+    const tx = this.db!.transaction([vectorStoreName(table), ivfStoreName(table)], "readwrite")
+    const vStore = tx.objectStore(vectorStoreName(table))
+    const ivfStore = tx.objectStore(ivfStoreName(table))
+    
+    // Collect all vectors
+    const allVectors: { id: number; vector: Float32Array }[] = []
+    await new Promise<void>((resolve, reject) => {
+      const req = vStore.openCursor()
+      req.onsuccess = () => {
+        const cursor = req.result
+        if (!cursor) {
+          resolve()
+          return
+        }
+        const { id, vector } = cursor.value
+        allVectors.push({ id, vector: new Float32Array(vector) })
+        cursor.continue()
+      }
+      req.onerror = () => reject(req.error)
+    })
+    
+    if (allVectors.length === 0) return
+    
+    // Simple k-means clustering for centroids
+    const dims = def.vector.dims
+    const centroids: Float32Array[] = []
+    
+    // Initialize centroids with random vectors
+    for (let i = 0; i < numCentroids; i++) {
+      const randomIdx = Math.floor(Math.random() * allVectors.length)
+      centroids.push(allVectors[randomIdx].vector)
+    }
+    
+    // Simple k-means iteration
+    for (let iter = 0; iter < 10; iter++) {
+      const clusters: number[][] = Array(numCentroids).fill(null).map(() => [])
+      
+      // Assign vectors to nearest centroid
+      for (const { id, vector } of allVectors) {
+        let minDist = Infinity
+        let bestCentroid = 0
+        
+        for (let i = 0; i < centroids.length; i++) {
+          const dist = this.euclideanDistance(vector, centroids[i])
+          if (dist < minDist) {
+            minDist = dist
+            bestCentroid = i
+          }
+        }
+        clusters[bestCentroid].push(id)
+      }
+      
+      // Update centroids
+      for (let i = 0; i < centroids.length; i++) {
+        if (clusters[i].length > 0) {
+          const newCentroid = new Float32Array(dims)
+          for (const id of clusters[i]) {
+            const vec = allVectors.find(v => v.id === id)?.vector
+            if (vec) {
+              for (let j = 0; j < dims; j++) {
+                newCentroid[j] += vec[j]
+              }
+            }
+          }
+          for (let j = 0; j < dims; j++) {
+            newCentroid[j] /= clusters[i].length
+          }
+          centroids[i] = newCentroid
+        }
+      }
+    }
+    
+    // Store centroids and their associated vectors
+    for (let centroidId = 0; centroidId < centroids.length; centroidId++) {
+      const clusterIds: number[] = []
+      for (const { id, vector } of allVectors) {
+        let minDist = Infinity
+        let bestCentroid = 0
+        
+        for (let i = 0; i < centroids.length; i++) {
+          const dist = this.euclideanDistance(vector, centroids[i])
+          if (dist < minDist) {
+            minDist = dist
+            bestCentroid = i
+          }
+        }
+        
+        if (bestCentroid === centroidId) {
+          clusterIds.push(id)
+        }
+      }
+      
+      if (clusterIds.length > 0) {
+        await requestToPromise(ivfStore.put({
+          centroidId,
+          centroid: Array.from(centroids[centroidId]),
+          vectorIds: clusterIds
+        }))
+      }
+    }
+    
+    await awaitTransaction(tx)
+  }
+
+  // Cache vector for faster repeated queries
+  private euclideanDistance(a: Float32Array, b: Float32Array): number {
+    let sum = 0
+    for (let i = 0; i < a.length; i++) {
+      const diff = a[i] - b[i]
+      sum += diff * diff
+    }
+    return Math.sqrt(sum)
+  }
+
+  private cacheVector(key: string, vector: Float32Array): void {
+    this.vectorCache.set(key, vector);
+    // Limit cache size to prevent memory issues
+    if (this.vectorCache.size > 1000) {
+      const firstKey = this.vectorCache.keys().next().value;
+      if (firstKey) this.vectorCache.delete(firstKey);
+    }
+  }
+
+  // Get cached vector or compute and cache
+  private async getCachedVector(table: string, text: string): Promise<Float32Array> {
+    const cacheKey = `${table}:${text}`;
+    const cached = this.vectorCache.get(cacheKey);
+    if (cached) return cached;
+    
+    const embedder = this.vectorEmbedders.get(table);
+    if (!embedder) throw new Error(`No embedder registered for table ${table}`);
+    
+    const vector = await embedder(text);
+    this.cacheVector(cacheKey, vector);
+    return vector;
+  }
+
+  // Convenience method for text-based vector search with caching
+  async vectorSearchText<T = any>(
+    table: string,
+    queryText: string,
+    opts?: { metric?: "cosine" | "dot" | "euclidean"; limit?: number; where?: WhereCondition }
+  ): Promise<(T & { id: number; score: number })[]> {
+    const vector = await this.getCachedVector(table, queryText);
+    return this.vectorSearch(table, vector, opts);
+  }
+
   // Vector search using cosine similarity (default) or dot/euclidean
   async vectorSearch<T = any>(
     table: string,
     inputVector: Float32Array,
-    opts?: { metric?: "cosine" | "dot" | "euclidean"; limit?: number; where?: WhereCondition }
+    opts?: { metric?: "cosine" | "dot" | "euclidean"; limit?: number; where?: WhereCondition; useIVF?: boolean }
   ): Promise<(T & { id: number; score: number })[]> {
     this.ensureDb()
     const def = this.ensureTable(table)
@@ -1029,35 +1275,104 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
 
     const limit = opts?.limit ?? 50
     const metric = opts?.metric ?? "cosine"
+    const useIVF = opts?.useIVF ?? false
 
-    const tx = this.db!.transaction([table, vectorStoreName(table)], "readonly")
+    const tx = this.db!.transaction([table, vectorStoreName(table), ivfStoreName(table)], "readonly")
     const vStore = tx.objectStore(vectorStoreName(table))
     const tStore = tx.objectStore(table)
+    const ivfStore = tx.objectStore(ivfStoreName(table))
 
     const inputNorm = metric === "cosine" ? norm(inputVector) : 1
     const results: { id: number; score: number }[] = []
 
-    // Full scan vectors for now (can be optimized with PQ/IVF in future)
-    await new Promise<void>((resolve, reject) => {
-      const req = vStore.openCursor()
-      req.onsuccess = async () => {
-        const cursor = req.result
-        if (!cursor) {
-          resolve()
-          return
-        }
-        const { id, vector } = cursor.value as { id: number; vector: number[] }
-        const v = new Float32Array(vector)
-        let score = 0
-        if (metric === "cosine") score = dot(inputVector, v) / (inputNorm * norm(v) || 1)
-        else if (metric === "dot") score = dot(inputVector, v)
-        else if (metric === "euclidean") score = -Math.hypot(...inputVector.map((x, i) => x - v[i]))
+    if (useIVF) {
+      // Use IVF index for approximate nearest neighbor search
+      try {
+        // Find nearest centroids
+        const centroidDistances: { centroidId: number; distance: number }[] = []
+        await new Promise<void>((resolve, reject) => {
+          const req = ivfStore.openCursor()
+          req.onsuccess = () => {
+            const cursor = req.result
+            if (!cursor) {
+              resolve()
+              return
+            }
+            const { centroidId, centroid } = cursor.value
+            const centroidVec = new Float32Array(centroid)
+            const distance = this.euclideanDistance(inputVector, centroidVec)
+            centroidDistances.push({ centroidId, distance })
+            cursor.continue()
+          }
+          req.onerror = () => reject(req.error)
+        })
 
-        results.push({ id, score })
-        cursor.continue()
+        // Sort centroids by distance and take top 3
+        centroidDistances.sort((a, b) => a.distance - b.distance)
+        const nearestCentroids = centroidDistances.slice(0, 3)
+
+        // Search only in nearest clusters
+        for (const { centroidId } of nearestCentroids) {
+          const ivfEntry = await requestToPromise(ivfStore.get(centroidId))
+          if (ivfEntry && ivfEntry.vectorIds) {
+            for (const id of ivfEntry.vectorIds) {
+              const vecEntry = await requestToPromise(vStore.get(id))
+              if (vecEntry) {
+                const v = new Float32Array(vecEntry.vector)
+                let score = 0
+                if (metric === "cosine") score = dot(inputVector, v) / (inputNorm * norm(v) || 1)
+                else if (metric === "dot") score = dot(inputVector, v)
+                else if (metric === "euclidean") score = -this.euclideanDistance(inputVector, v)
+
+                results.push({ id, score })
+                
+                // Early termination if we have enough candidates
+                if (results.length >= limit * 2) {
+                  break
+                }
+              }
+            }
+          }
+          if (results.length >= limit * 2) {
+            break
+          }
+        }
+      } catch {
+        // Fall back to full scan if IVF index is not available
+        console.warn("IVF index not available, falling back to full scan")
       }
-      req.onerror = () => reject(req.error)
-    })
+    }
+
+    // Fallback to full scan if IVF is disabled or failed
+    if (results.length === 0) {
+      await new Promise<void>((resolve, reject) => {
+        const req = vStore.openCursor()
+        req.onsuccess = async () => {
+          const cursor = req.result
+          if (!cursor) {
+            resolve()
+            return
+          }
+          const { id, vector } = cursor.value as { id: number; vector: number[] }
+          const v = new Float32Array(vector)
+          let score = 0
+          if (metric === "cosine") score = dot(inputVector, v) / (inputNorm * norm(v) || 1)
+          else if (metric === "dot") score = dot(inputVector, v)
+          else if (metric === "euclidean") score = -Math.hypot(...inputVector.map((x, i) => x - v[i]))
+
+          results.push({ id, score })
+          
+          // Early termination for large datasets - stop after collecting 2x limit
+          if (results.length >= limit * 3) {
+            resolve()
+            return
+          }
+          
+          cursor.continue()
+        }
+        req.onerror = () => reject(req.error)
+      })
+    }
 
     // Fetch records, apply optional where, sort and limit
     const out: (T & { id: number; score: number })[] = []

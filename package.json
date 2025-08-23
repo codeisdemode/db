@@ -38,7 +38,7 @@
       "types": "./dist/hooks/index.d.ts"
     },
     "./schema": {
-      "import": "./dist/lib/schema-examples.js", 
+      "import": "./dist/lib/schema-examples.js",
       "require": "./dist/lib/schema-examples.js",
       "types": "./dist/lib/schema-examples.d.ts"
     }
@@ -127,11 +127,17 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.8.0",
+    "@types/jest": "^30.0.0",
     "@types/node": "^22",
     "@types/react": "^19.1.11",
     "@types/react-dom": "^19",
+    "fake-indexeddb": "^6.1.0",
+    "jest": "^30.0.5",
+    "jest-environment-jsdom": "^30.0.5",
     "postcss": "^8.5",
     "tailwindcss": "^3.4.17",
+    "ts-jest": "^29.4.1",
     "typescript": "^5.9.2"
   }
 }
