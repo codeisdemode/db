@@ -37,6 +37,12 @@ columnist/
 │   ├── use-columnist.ts    # Database instance hook
 │   ├── use-live-query.ts   # Reactive query hook
 │   └── use-stats.ts        # Statistics hook
+├── __tests__/              # Unit tests
+│   ├── columnist.test.ts   # Core database tests
+│   └── vector.test.ts      # Vector search tests
+├── src/                    # Source files
+│   ├── node-compat.ts      # Node.js compatibility
+│   └── test-setup.ts       # Test environment setup
 ├── app/                    # Demo Next.js app
 │   ├── test/              # Test page
 │   └── devtools/          # Database inspector
@@ -45,18 +51,25 @@ columnist/
 
 ## Testing
 
-1. **Manual Testing**
+1. **Unit Testing**
+   ```bash
+   npx jest
+   # or run specific test files
+   npx jest __tests__/vector.test.ts
+   ```
+
+2. **Manual Testing**
    ```bash
    npm run dev
    # Visit http://localhost:3000/test
    ```
 
-2. **Type Checking**
+3. **Type Checking**
    ```bash
    npm run typecheck
    ```
 
-3. **Build Testing**
+4. **Build Testing**
    ```bash
    npm run build:lib
    npm pack --dry-run
@@ -113,16 +126,21 @@ We use conventional commits:
 ## Areas for Contribution
 
 ### High Priority
-- **Vector Search Optimization** - Implement PQ/IVF for large datasets
-- **Security Features** - Add encryption at rest
-- **Sync Adapters** - Real-time synchronization
-- **Performance** - Query optimization and compound indexes
+- **Security Features** - Add encryption at rest, authentication hooks
+- **Sync Adapters** - Real-time synchronization with external databases
+- **Performance** - Query optimization, compound indexes, and caching
+- **Production Readiness** - Error handling, monitoring, and logging
 
 ### Medium Priority
-- **Documentation** - API examples and tutorials
-- **Testing** - Unit and integration tests
-- **Devtools** - Enhanced database inspector
-- **Migration Tools** - Schema evolution helpers
+- **Documentation** - Comprehensive API docs, tutorials, and examples
+- **Testing** - Additional unit tests, integration tests, and E2E tests
+- **Devtools** - Enhanced database inspector with query profiling
+- **Migration Tools** - Schema evolution helpers and data migration utilities
+
+### Recently Completed ✅
+- **Vector Search Optimization** - Implemented IVF indexing, vector caching, and performance optimizations
+- **Testing Infrastructure** - Comprehensive Jest test suite with fake-indexeddb
+- **Node.js Compatibility** - Improved error messages and fallback mechanisms
 
 ### Low Priority
 - **UI Improvements** - Better demo interface
