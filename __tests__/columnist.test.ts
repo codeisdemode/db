@@ -34,7 +34,7 @@ describe('Columnist Database', () => {
     expect(result.id).toBe(1);
 
     // Retrieve the record
-    const users = await db.getAll('users');
+    const users = await db.getAll<{ name: string; email: string }>('users');
     expect(users).toHaveLength(1);
     expect(users[0].name).toBe('Test User');
   });
@@ -59,5 +59,31 @@ describe('Columnist Database', () => {
     // Use find instead of search to avoid transaction issues in test
     const results = await db.find({ table: 'messages', where: { userId: 1 } });
     expect(results).toHaveLength(2);
+  });
+
+  test('should perform security audit', async () => {
+    const schema = {
+      users: defineTable()
+        .column('id', 'number')
+        .column('name', 'string')
+        .column('password', 'string') // Potential sensitive field
+        .primaryKey('id')
+        .build()
+    };
+
+    const db = await Columnist.init('security-test', { schema, version: 1 });
+    
+    const audit = await db.securityAudit();
+    
+    expect(audit).toHaveProperty('issues');
+    expect(audit).toHaveProperty('recommendations');
+    expect(Array.isArray(audit.issues)).toBe(true);
+    expect(Array.isArray(audit.recommendations)).toBe(true);
+    
+    // Should detect potential sensitive field
+    const hasSensitiveFieldWarning = audit.issues.some(issue => 
+      issue.includes('password') && issue.includes('users')
+    );
+    expect(hasSensitiveFieldWarning).toBe(true);
   });
 });

@@ -126,7 +126,6 @@ We use conventional commits:
 ## Areas for Contribution
 
 ### High Priority
-- **Security Features** - Add encryption at rest, authentication hooks
 - **Sync Adapters** - Real-time synchronization with external databases
 - **Performance** - Query optimization, compound indexes, and caching
 - **Production Readiness** - Error handling, monitoring, and logging
@@ -138,6 +137,7 @@ We use conventional commits:
 - **Migration Tools** - Schema evolution helpers and data migration utilities
 
 ### Recently Completed ✅
+- **Security Features** - Added security audit, encryption at rest, and authentication hooks
 - **Vector Search Optimization** - Implemented IVF indexing, vector caching, and performance optimizations
 - **Testing Infrastructure** - Comprehensive Jest test suite with fake-indexeddb
 - **Node.js Compatibility** - Improved error messages and fallback mechanisms

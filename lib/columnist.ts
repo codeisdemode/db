@@ -205,6 +205,7 @@ function euclideanDistance(a: Float32Array, b: Float32Array): number {
   return Math.sqrt(sum)
 }
 
+
 function encodeCursor(obj: unknown): string {
   try {
     return btoa(JSON.stringify(obj))
@@ -357,6 +358,8 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
   private vectorEmbedders: Map<string, (input: string) => Promise<Float32Array>> = new Map()
   private migrations?: Record<number, (db: IDBDatabase, tx: IDBTransaction, oldVersion: number) => void>
   private vectorCache: Map<string, Float32Array> = new Map()
+  private encryptionKey: CryptoKey | null = null
+  private authHooks: Map<string, (operation: string, table: string, data?: any) => boolean> = new Map()
 
   private constructor(name: string, schema: SchemaDefinition, version: number, migrations?: Record<number, (db: IDBDatabase, tx: IDBTransaction, oldVersion: number) => void>) {
     this.name = name
@@ -367,7 +370,7 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
 
   static #instance: ColumnistDB | null = null
 
-  static async init(name: string, opts?: { schema?: SchemaDefinition; version?: number; migrations?: Record<number, (db: IDBDatabase, tx: IDBTransaction, oldVersion: number) => void> }): Promise<ColumnistDB> {
+  static async init(name: string, opts?: { schema?: SchemaDefinition; version?: number; migrations?: Record<number, (db: IDBDatabase, tx: IDBTransaction, oldVersion: number) => void>; encryptionKey?: string }): Promise<ColumnistDB> {
     const useInMemory = !isClientIndexedDBAvailable();
     
     if (useInMemory) {
@@ -386,6 +389,12 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
 
     const instance = new ColumnistDB(name, schema, version, opts?.migrations)
     await instance.load()
+    
+    // Initialize encryption if key provided
+    if (opts?.encryptionKey) {
+      await instance.setEncryptionKey(opts.encryptionKey)
+    }
+    
     ColumnistDB.#instance = instance
     return instance
   }
@@ -547,6 +556,11 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
     this.ensureDb()
     const tableName = table || DEFAULT_TABLE
     const def = this.ensureTable(tableName)
+    
+    // Check authentication
+    if (!this.checkAuth('update', tableName, { id, ...updates })) {
+      throw new Error('Update operation not authorized')
+    }
 
     const stores = [tableName, indexStoreName(tableName), META_STATS_STORE]
     if (def.vector) stores.push(vectorStoreName(tableName))
@@ -677,6 +691,11 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
     this.ensureDb()
     const tableName = table || DEFAULT_TABLE
     const def = this.ensureTable(tableName)
+    
+    // Check authentication
+    if (!this.checkAuth('delete', tableName, { id })) {
+      throw new Error('Delete operation not authorized')
+    }
 
     const stores = [tableName, indexStoreName(tableName), META_STATS_STORE]
     if (def.vector) stores.push(vectorStoreName(tableName))
@@ -791,13 +810,21 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
     this.ensureDb()
     const tableName = table || DEFAULT_TABLE
     const def = this.ensureTable(tableName)
+    
+    // Check authentication
+    if (!this.checkAuth('insert', tableName, record)) {
+      throw new Error('Insert operation not authorized')
+    }
 
     // Validate record
     const validatedRecord = this.validateRecord(record, def)
 
+    // Encrypt sensitive fields before storage
+    const encryptedRecord = await this.encryptSensitiveFields(validatedRecord, def)
+
     // Normalize record for storage (convert Date to ISO)
     const normalized: Record<string, unknown> = {}
-    for (const [k, v] of Object.entries(validatedRecord)) {
+    for (const [k, v] of Object.entries(encryptedRecord)) {
       const colType = def.columns[k]
       normalized[k] = colType === "date" ? toISO(v) : v
     }
@@ -871,18 +898,27 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
 
   async getAll<T = unknown>(table: string, limit = 1000): Promise<(T & { id: number })[]> {
     this.ensureDb()
-    this.ensureTable(table)
+    const def = this.ensureTable(table)
+    
+    // Check authentication
+    if (!this.checkAuth('read', table)) {
+      throw new Error('Read operation not authorized')
+    }
     const out: (T & { id: number })[] = []
     const tx = this.db!.transaction([table], "readonly")
     const store = tx.objectStore(table)
     const req = store.openCursor()
     return new Promise((resolve, reject) => {
-      req.onsuccess = () => {
+      req.onsuccess = async () => {
         const cursor = req.result
         if (cursor) {
           const value: any = cursor.value
           value.id = cursor.primaryKey as number
-          out.push(value)
+          
+          // Decrypt sensitive fields after retrieval
+          const decryptedValue = await this.decryptSensitiveFields(value, def)
+          out.push(decryptedValue as T & { id: number })
+          
           if (out.length >= limit) {
             resolve(out)
             return
@@ -900,6 +936,11 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
     this.ensureDb()
     const tableName = options.table || DEFAULT_TABLE
     const def = this.ensureTable(tableName)
+    
+    // Check authentication
+    if (!this.checkAuth('read', tableName)) {
+      throw new Error('Read operation not authorized')
+    }
     const limit = options.limit || 1000
     const offset = options.offset || 0
 
@@ -956,7 +997,7 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
       const cursorReq = index.openCursor(indexRange, direction)
 
       await new Promise<void>((resolve, reject) => {
-        cursorReq.onsuccess = () => {
+        cursorReq.onsuccess = async () => {
           const cursor = cursorReq.result
           if (!cursor || results.length >= limit) {
             resolve()
@@ -972,10 +1013,13 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
           }
           record.id = id
 
+          // Decrypt sensitive fields
+          const decryptedRecord = await this.decryptSensitiveFields(record, def)
+
           // Apply remaining where conditions
-          if (this.matchesWhere(record, where)) {
+          if (this.matchesWhere(decryptedRecord, where)) {
             if (skipped >= offset) {
-              results.push(record as T & { id: number })
+              results.push(decryptedRecord as T & { id: number })
             } else {
               skipped++
             }
@@ -990,7 +1034,7 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
       const cursorReq = store.openCursor()
       
       await new Promise<void>((resolve, reject) => {
-        cursorReq.onsuccess = () => {
+        cursorReq.onsuccess = async () => {
           const cursor = cursorReq.result
           if (!cursor || results.length >= limit) {
             resolve()
@@ -1006,10 +1050,13 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
           }
           record.id = id
 
+          // Decrypt sensitive fields
+          const decryptedRecord = await this.decryptSensitiveFields(record, def)
+
           // Apply where conditions
-          if (this.matchesWhere(record, where)) {
+          if (this.matchesWhere(decryptedRecord, where)) {
             if (skipped >= offset) {
-              results.push(record as T & { id: number })
+              results.push(decryptedRecord as T & { id: number })
             } else {
               skipped++
             }
@@ -1107,6 +1154,176 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
   registerEmbedder(table: string, embedder: (input: string) => Promise<Float32Array>): void {
     this.ensureTable(table)
     this.vectorEmbedders.set(table, embedder)
+  }
+
+  // Security audit: Check for potential security issues
+  async securityAudit(): Promise<{
+    issues: string[]
+    recommendations: string[]
+  }> {
+    const issues: string[] = []
+    const recommendations: string[] = []
+    
+    // Check if running in browser environment (more secure)
+    if (typeof window === 'undefined') {
+      issues.push('Running in Node.js environment - data may be less secure')
+      recommendations.push('Use browser environment for production applications')
+    }
+    
+    // Check for large datasets that might need encryption
+    const stats = await this.getStats()
+    if (typeof stats !== 'object' || !('overallBytes' in stats)) {
+      return { issues, recommendations }
+    }
+    
+    const { overallBytes, tables } = stats as { overallBytes: number; tables: Record<string, TableStats> }
+    
+    if (overallBytes > 10 * 1024 * 1024) { // 10MB threshold
+      issues.push('Large dataset detected - consider encryption for sensitive data')
+      recommendations.push('Implement encryption at rest for sensitive information')
+    }
+    
+    // Check for potential sensitive field names
+    const sensitivePatterns = [/password/i, /secret/i, /key/i, /token/i, /auth/i]
+    for (const [tableName, tableDef] of Object.entries(this.schema)) {
+      for (const fieldName of Object.keys(tableDef.columns)) {
+        if (sensitivePatterns.some(pattern => pattern.test(fieldName))) {
+          issues.push(`Potential sensitive field name detected: ${tableName}.${fieldName}`)
+          recommendations.push(`Consider encrypting sensitive field: ${tableName}.${fieldName}`)
+        }
+      }
+    }
+    
+    return { issues, recommendations }
+  }
+
+  // Encryption methods
+  async setEncryptionKey(key: string): Promise<void> {
+    if (typeof window === 'undefined' || !window.crypto || !window.crypto.subtle) {
+      throw new Error('Web Crypto API not available in this environment')
+    }
+    
+    // Derive key from password using PBKDF2
+    const encoder = new TextEncoder()
+    const keyMaterial = await window.crypto.subtle.importKey(
+      'raw',
+      encoder.encode(key),
+      'PBKDF2',
+      false,
+      ['deriveKey']
+    )
+    
+    this.encryptionKey = await window.crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        salt: encoder.encode('columnist-encryption-salt'),
+        iterations: 100000,
+        hash: 'SHA-256'
+      },
+      keyMaterial,
+      {
+        name: 'AES-GCM',
+        length: 256
+      },
+      false,
+      ['encrypt', 'decrypt']
+    )
+  }
+
+  private async encryptData(data: string): Promise<string> {
+    if (!this.encryptionKey) return data
+    
+    const encoder = new TextEncoder()
+    const iv = window.crypto.getRandomValues(new Uint8Array(12))
+    const encrypted = await window.crypto.subtle.encrypt(
+      {
+        name: 'AES-GCM',
+        iv: iv
+      },
+      this.encryptionKey,
+      encoder.encode(data)
+    )
+    
+    // Combine IV and encrypted data
+    const combined = new Uint8Array(iv.length + encrypted.byteLength)
+    combined.set(iv)
+    combined.set(new Uint8Array(encrypted), iv.length)
+    
+    return btoa(String.fromCharCode(...combined))
+  }
+
+  private async decryptData(encryptedData: string): Promise<string> {
+    if (!this.encryptionKey) return encryptedData
+    
+    try {
+      const combined = new Uint8Array(atob(encryptedData).split('').map(c => c.charCodeAt(0)))
+      const iv = combined.slice(0, 12)
+      const data = combined.slice(12)
+      
+      const decrypted = await window.crypto.subtle.decrypt(
+        {
+          name: 'AES-GCM',
+          iv: iv
+        },
+        this.encryptionKey,
+        data
+      )
+      
+      return new TextDecoder().decode(decrypted)
+    } catch {
+      return encryptedData // Return original if decryption fails
+    }
+  }
+
+  private async encryptSensitiveFields(record: Record<string, unknown>, def: TableDefinition): Promise<Record<string, unknown>> {
+    if (!this.encryptionKey) return record
+    
+    const sensitivePatterns = [/password/i, /secret/i, /key/i, /token/i, /auth/i]
+    const result = { ...record }
+    
+    for (const [field, value] of Object.entries(record)) {
+      if (typeof value === 'string' && sensitivePatterns.some(pattern => pattern.test(field))) {
+        result[field] = await this.encryptData(value)
+      }
+    }
+    
+    return result
+  }
+
+  private async decryptSensitiveFields(record: Record<string, unknown>, def: TableDefinition): Promise<Record<string, unknown>> {
+    if (!this.encryptionKey) return record
+    
+    const sensitivePatterns = [/password/i, /secret/i, /key/i, /token/i, /auth/i]
+    const result = { ...record }
+    
+    for (const [field, value] of Object.entries(record)) {
+      if (typeof value === 'string' && sensitivePatterns.some(pattern => pattern.test(field))) {
+        result[field] = await this.decryptData(value)
+      }
+    }
+    
+    return result
+  }
+
+  // Authentication hooks
+  registerAuthHook(name: string, hook: (operation: string, table: string, data?: any) => boolean): void {
+    this.authHooks.set(name, hook)
+  }
+
+  removeAuthHook(name: string): void {
+    this.authHooks.delete(name)
+  }
+
+  private checkAuth(operation: string, table: string, data?: any): boolean {
+    if (this.authHooks.size === 0) return true
+    
+    for (const hook of this.authHooks.values()) {
+      if (!hook(operation, table, data)) {
+        return false
+      }
+    }
+    
+    return true
   }
 
   // Build IVF index for approximate nearest neighbor search
