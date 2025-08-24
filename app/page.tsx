@@ -138,7 +138,7 @@ export default function Home() {
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12 md:mb-16">
             <Button size="lg" className="group" asChild>
-              <Link href="#">
+              <Link href="/sign-up">
                 Start Free Now
                 <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
               </Link>
@@ -424,7 +424,7 @@ export default function Home() {
           </p>
 
           <Button size="lg" className="group" asChild>
-            <Link href="#">
+            <Link href="/sign-up">
               Start Free Now
               <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
             </Link>
