@@ -66,93 +66,120 @@ export class SupabaseSyncAdapter extends BaseSyncAdapter {
     if (!this.supabase) throw new Error('Supabase not initialized');
 
     const tablePrefix = this.config.tablePrefix || 'columnist_';
+    const maxRetries = this.options.maxRetries || 3;
 
-    try {
-      // Group changes by table
-      const changesByTable = new Map<string, { inserts: any[]; updates: any[]; deletes: any[] }>();
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // Group changes by table
+        const changesByTable = new Map<string, { inserts: any[]; updates: any[]; deletes: any[] }>();
 
-      for (const insert of changes.inserts) {
-        const { _table, ...data } = insert;
-        if (_table) {
-          if (!changesByTable.has(_table)) {
-            changesByTable.set(_table, { inserts: [], updates: [], deletes: [] });
+        for (const insert of changes.inserts) {
+          const { _table, ...data } = insert;
+          if (_table) {
+            if (!changesByTable.has(_table)) {
+              changesByTable.set(_table, { inserts: [], updates: [], deletes: [] });
+            }
+            changesByTable.get(_table)!.inserts.push(data);
           }
-          changesByTable.get(_table)!.inserts.push(data);
         }
-      }
 
-      for (const update of changes.updates) {
-        const { _table, ...data } = update;
-        if (_table) {
-          if (!changesByTable.has(_table)) {
-            changesByTable.set(_table, { inserts: [], updates: [], deletes: [] });
+        for (const update of changes.updates) {
+          const { _table, ...data } = update;
+          if (_table) {
+            if (!changesByTable.has(_table)) {
+              changesByTable.set(_table, { inserts: [], updates: [], deletes: [] });
+            }
+            changesByTable.get(_table)!.updates.push(data);
           }
-          changesByTable.get(_table)!.updates.push(data);
         }
-      }
 
-      for (const del of changes.deletes) {
-        if (typeof del === 'object' && '_table' in del && 'id' in del) {
-          if (!changesByTable.has((del as any)._table)) {
-            changesByTable.set((del as any)._table, { inserts: [], updates: [], deletes: [] });
+        for (const del of changes.deletes) {
+          if (typeof del === 'object' && '_table' in del && 'id' in del) {
+            if (!changesByTable.has((del as any)._table)) {
+              changesByTable.set((del as any)._table, { inserts: [], updates: [], deletes: [] });
+            }
+            changesByTable.get((del as any)._table)!.deletes.push((del as any).id);
+          } else if (typeof del === 'number') {
+            console.warn('Simple numeric delete ID without table specified - cannot delete from Supabase');
           }
-          changesByTable.get((del as any)._table)!.deletes.push((del as any).id);
-        } else if (typeof del === 'number') {
-          console.warn('Simple numeric delete ID without table specified - cannot delete from Supabase');
-        }
-      }
-
-      // Execute changes for each table
-      for (const [table, tableChanges] of changesByTable) {
-        const fullTableName = `${tablePrefix}${table}`;
-
-        // Insert new records
-        if (tableChanges.inserts.length > 0) {
-          const { error } = await this.supabase
-            .from(fullTableName)
-            .insert(tableChanges.inserts.map(record => ({
-              ...record,
-              _last_modified: new Date().toISOString(),
-              _source: 'local'
-            })));
-
-          if (error) throw error;
         }
 
-        // Update existing records
-        for (const update of tableChanges.updates) {
-          const { id, ...data } = update;
-          if (id) {
+        // Execute changes for each table with transaction-like behavior
+        for (const [table, tableChanges] of changesByTable) {
+          const fullTableName = `${tablePrefix}${table}`;
+
+          // Insert new records with conflict handling
+          if (tableChanges.inserts.length > 0) {
+            const { data, error } = await this.supabase
+              .from(fullTableName)
+              .upsert(tableChanges.inserts.map(record => ({
+                ...record,
+                _last_modified: new Date().toISOString(),
+                _source: 'local',
+                _version: (record._version || 0) + 1
+              })), {
+                onConflict: 'id',
+                ignoreDuplicates: false
+              });
+
+            if (error) {
+              if (error.code === '23505') { // Unique violation
+                console.warn('Insert conflict detected, retrying as update');
+                // Convert failed inserts to updates
+                tableChanges.updates.push(...tableChanges.inserts);
+                tableChanges.inserts = [];
+              } else {
+                throw error;
+              }
+            }
+          }
+
+          // Update existing records with optimistic concurrency
+          for (const update of tableChanges.updates) {
+            const { id, ...data } = update;
+            if (id) {
+              const { error } = await this.supabase
+                .from(fullTableName)
+                .update({
+                  ...data,
+                  _last_modified: new Date().toISOString(),
+                  _source: 'local',
+                  _version: (data._version || 0) + 1
+                })
+                .eq('id', id);
+
+              if (error) throw error;
+            }
+          }
+
+          // Delete records
+          if (tableChanges.deletes.length > 0) {
             const { error } = await this.supabase
               .from(fullTableName)
-              .update({
-                ...data,
-                _last_modified: new Date().toISOString(),
-                _source: 'local'
-              })
-              .eq('id', id);
+              .delete()
+              .in('id', tableChanges.deletes);
 
             if (error) throw error;
           }
         }
 
-        // Delete records
-        if (tableChanges.deletes.length > 0) {
-          const { error } = await this.supabase
-            .from(fullTableName)
-            .delete()
-            .in('id', tableChanges.deletes);
+        // Success - break out of retry loop
+        return;
 
-          if (error) throw error;
+      } catch (error) {
+        if (attempt === maxRetries) {
+          this.emit({ 
+            type: 'sync-error', 
+            error: error instanceof Error ? error : new Error('Supabase push failed after retries') 
+          });
+          throw error;
         }
-      }
 
-    } catch (error) {
-      this.emit({ 
-        type: 'sync-error', 
-        error: error instanceof Error ? error : new Error('Supabase push failed') 
-      });
-      throw error;
+        // Wait before retrying with exponential backoff
+        const backoffTime = this.calculateBackoff(attempt);
+        console.warn(`Push attempt ${attempt} failed, retrying in ${backoffTime}ms`);
+        await this.delay(backoffTime);
+      }
     }
   }
 
@@ -160,6 +187,7 @@ export class SupabaseSyncAdapter extends BaseSyncAdapter {
     if (!this.supabase) throw new Error('Supabase not initialized');
 
     const tablePrefix = this.config.tablePrefix || 'columnist_';
+    const maxRetries = this.options.maxRetries || 3;
     const changes: ChangeSet = {
       inserts: [],
       updates: [],
@@ -167,41 +195,53 @@ export class SupabaseSyncAdapter extends BaseSyncAdapter {
       timestamp: new Date()
     };
 
-    try {
-      const schema = this.db.getSchema();
-      const tables = this.options.tables || Object.keys(schema);
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const schema = this.db.getSchema();
+        const tables = this.options.tables || Object.keys(schema);
 
-      for (const table of tables) {
-        const fullTableName = `${tablePrefix}${table}`;
+        for (const table of tables) {
+          const fullTableName = `${tablePrefix}${table}`;
 
-        // Get recent changes (last 24 hours by default)
-        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-        
-        const { data, error } = await this.supabase
-          .from(fullTableName)
-          .select('*')
-          .gte('_last_modified', twentyFourHoursAgo)
-          .order('_last_modified', { ascending: false });
+          // Get recent changes (last 24 hours by default)
+          const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+          
+          const { data, error } = await this.supabase
+            .from(fullTableName)
+            .select('*')
+            .gte('_last_modified', twentyFourHoursAgo)
+            .order('_last_modified', { ascending: false });
 
-        if (error) throw error;
+          if (error) throw error;
 
-        for (const record of data || []) {
-          // Skip changes that originated locally
-          if (record._source === 'local') continue;
+          for (const record of data || []) {
+            // Skip changes that originated locally
+            if (record._source === 'local') continue;
 
-          changes.updates.push({
-            ...record,
-            _table: table
-          });
+            changes.updates.push({
+              ...record,
+              _table: table
+            });
+          }
         }
-      }
 
-    } catch (error) {
-      this.emit({ 
-        type: 'sync-error', 
-        error: error instanceof Error ? error : new Error('Supabase pull failed') 
-      });
-      throw error;
+        // Success - break out of retry loop
+        return changes;
+
+      } catch (error) {
+        if (attempt === maxRetries) {
+          this.emit({ 
+            type: 'sync-error', 
+            error: error instanceof Error ? error : new Error('Supabase pull failed after retries') 
+          });
+          throw error;
+        }
+
+        // Wait before retrying with exponential backoff
+        const backoffTime = this.calculateBackoff(attempt);
+        console.warn(`Pull attempt ${attempt} failed, retrying in ${backoffTime}ms`);
+        await this.delay(backoffTime);
+      }
     }
 
     return changes;
@@ -259,5 +299,30 @@ export class SupabaseSyncAdapter extends BaseSyncAdapter {
   dispose(): void {
     this.teardownRealtimeListeners();
     super.dispose();
+  }
+
+  /**
+   * Calculate backoff time based on attempt number
+   */
+  private calculateBackoff(attempt: number): number {
+    const baseDelay = 1000; // 1 second base
+    
+    switch (this.options.backoffStrategy) {
+      case 'exponential':
+        return baseDelay * Math.pow(2, attempt - 1);
+      case 'linear':
+        return baseDelay * attempt;
+      case 'fixed':
+        return baseDelay;
+      default:
+        return baseDelay * Math.pow(2, attempt - 1);
+    }
+  }
+
+  /**
+   * Delay execution for specified milliseconds
+   */
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 }
