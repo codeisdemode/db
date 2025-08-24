@@ -3,6 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { StripeCheckout } from "@/components/stripe-checkout"
 import { 
   Check, 
   X, 
@@ -40,7 +41,8 @@ const pricingPlans = [
       "No advanced analytics"
     ],
     cta: "Get Started",
-    href: "/docs"
+    href: "/docs",
+    priceId: null
   },
   {
     name: "Pro",
@@ -63,7 +65,8 @@ const pricingPlans = [
     ],
     limitations: [],
     cta: "Start Free Trial",
-    href: "/docs"
+    href: "/docs",
+    priceId: process.env.NEXT_PUBLIC_STRIPE_PRO_MONTHLY_PRICE_ID
   },
   {
     name: "Enterprise",
@@ -86,7 +89,8 @@ const pricingPlans = [
     ],
     limitations: [],
     cta: "Contact Sales",
-    href: "/docs"
+    href: "/contact",
+    priceId: null
   }
 ]
 
@@ -296,14 +300,26 @@ export default function Pricing() {
                 ))}
               </div>
 
-              <Button
-                className="w-full"
-                variant={plan.popular ? "default" : "outline"}
-                size="lg"
-                asChild
-              >
-                <Link href={plan.href}>{plan.cta}</Link>
-              </Button>
+              {plan.priceId ? (
+                <StripeCheckout priceId={plan.priceId} planName={plan.name}>
+                  <Button
+                    className="w-full"
+                    variant={plan.popular ? "default" : "outline"}
+                    size="lg"
+                  >
+                    {plan.cta}
+                  </Button>
+                </StripeCheckout>
+              ) : (
+                <Button
+                  className="w-full"
+                  variant={plan.popular ? "default" : "outline"}
+                  size="lg"
+                  asChild
+                >
+                  <Link href={plan.href}>{plan.cta}</Link>
+                </Button>
+              )}
             </div>
           ))}
         </div>
