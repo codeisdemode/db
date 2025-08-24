@@ -8,7 +8,6 @@ pnpm-debug.log*
 # Production builds
 .next/
 out/
-dist/
 build/
 
 # Environment files
