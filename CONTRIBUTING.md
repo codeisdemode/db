@@ -6,7 +6,7 @@ Thank you for your interest in contributing to Columnist! This document provides
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/columnist-io/db.git
+   git clone https://github.com/codeisdemode/db.git
    cd db
    ```
 
@@ -141,6 +141,13 @@ We use conventional commits:
 - **Vector Search Optimization** - Implemented IVF indexing, vector caching, and performance optimizations
 - **Testing Infrastructure** - Comprehensive Jest test suite with fake-indexeddb
 - **Node.js Compatibility** - Improved error messages and fallback mechanisms
+- **Production Build System** - Complete TypeScript compilation with proper dist/ output
+- **GitHub Repository Updates** - Added built distribution files and version tags
+- **Full Test Suite** - All 54 tests passing successfully
+- **Sync Adapter Test Coverage** - Comprehensive test suites for Firebase and Supabase sync adapters
+- **TypeScript Error Resolution** - Fixed all compilation errors in app components and subscription service
+- **Utility Function Testing** - Added test coverage for utils.ts functions
+- **Enhanced Subscription Service** - Added getUserSubscriptionsByStripeId method for webhook integration
 
 ### Low Priority
 - **UI Improvements** - Better demo interface

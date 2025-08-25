@@ -15,7 +15,7 @@ let subscriptionService: SubscriptionService
 
 async function getSubscriptionService() {
   if (!subscriptionService) {
-    const db = new Columnist('subscriptions')
+    const db = await Columnist.init('subscriptions')
     subscriptionService = new SubscriptionService(db)
     await subscriptionService.initialize()
   }
@@ -105,9 +105,7 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
 
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
   const service = await getSubscriptionService()
-  const userSubscriptions = await service.db.query("subscriptions", {
-    where: { stripeSubscriptionId: subscription.id }
-  })
+  const userSubscriptions = await service.getUserSubscriptionsByStripeId(subscription.id)
 
   if (userSubscriptions.length > 0) {
     const userSubscription = userSubscriptions[0]
@@ -127,9 +125,7 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
 
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   const service = await getSubscriptionService()
-  const userSubscriptions = await service.db.query("subscriptions", {
-    where: { stripeSubscriptionId: subscription.id }
-  })
+  const userSubscriptions = await service.getUserSubscriptionsByStripeId(subscription.id)
 
   if (userSubscriptions.length > 0) {
     const userSubscription = userSubscriptions[0]

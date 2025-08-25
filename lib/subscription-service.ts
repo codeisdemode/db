@@ -32,9 +32,9 @@ export const UserTableDefinition = {
 } as const
 
 export class SubscriptionService {
-  private db: Columnist
+  private db: any
   
-  constructor(db: Columnist) {
+  constructor(db: any) {
     this.db = db
   }
 
@@ -144,6 +144,14 @@ export class SubscriptionService {
       where: { status: ["active", "trialing"] as any }
     })
     
-    return subscriptions.map(sub => SubscriptionSchema.parse(sub))
+    return subscriptions.map((sub: any) => SubscriptionSchema.parse(sub))
+  }
+
+  async getUserSubscriptionsByStripeId(stripeSubscriptionId: string): Promise<Subscription[]> {
+    const subscriptions = await this.db.query("subscriptions", {
+      where: { stripeSubscriptionId }
+    })
+    
+    return subscriptions.map((sub: any) => SubscriptionSchema.parse(sub))
   }
 }
