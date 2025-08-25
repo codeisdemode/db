@@ -83,3 +83,12 @@ coverage/
 
 # Turbo
 .turbo
+
+# Monorepo packages directory (maintaining single package structure)
+packages/
+
+# Turborepo configuration (not used in single package structure)
+turbo.json
+
+# Showcase app node_modules
+showcase/node_modules/
