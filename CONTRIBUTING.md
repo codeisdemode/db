@@ -126,11 +126,17 @@ We use conventional commits:
 ## Areas for Contribution
 
 ### High Priority
+- **Cross-Device Synchronization** - Multi-device sync with conflict resolution and offline support
+- **Peer-to-Peer Sync** - Local network and WebRTC-based device-to-device synchronization
+- **Context Sharing** - Application state and session transfer across devices
 - **Sync Adapters** - Real-time synchronization with external databases
 - **Performance** - Query optimization, compound indexes, and caching
 - **Production Readiness** - Error handling, monitoring, and logging
 
 ### Medium Priority
+- **CRDT Integration** - Conflict-free replicated data types for complex synchronization
+- **Selective Sync** - Device-specific data partitioning and bandwidth optimization
+- **Presence Awareness** - Real-time device status and network condition monitoring
 - **Documentation** - Comprehensive API docs, tutorials, and examples
 - **Testing** - Additional unit tests, integration tests, and E2E tests
 - **Devtools** - Enhanced database inspector with query profiling
@@ -150,6 +156,9 @@ We use conventional commits:
 - **Enhanced Subscription Service** - Added getUserSubscriptionsByStripeId method for webhook integration
 
 ### Low Priority
+- **Protocol Optimization** - Binary protocols, compression, and efficient data transfer
+- **Battery-Aware Sync** - Power-efficient synchronization scheduling
+- **Predictive Prefetching** - Smart data caching based on usage patterns
 - **UI Improvements** - Better demo interface
 - **Example Apps** - Real-world usage examples
 - **Benchmarks** - Performance comparisons
