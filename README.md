@@ -17,6 +17,7 @@
 - 📊 **Analytics** - Built-in performance statistics
 - 🔄 **Real-time** - Live subscriptions and automatic UI updates
 - 📱 **Offline First** - Works completely client-side
+- 🤝 **Cross-Device Sync** - Multi-device synchronization with conflict resolution
 - 🛠️ **Developer Tools** - Built-in database inspector
 
 ## Quick Start
@@ -260,6 +261,71 @@ const {
   deps: [currentUserId], // Re-query dependencies
   subscribe: true        // Auto-subscribe to changes
 })
+```
+
+#### `useSearch(options)`
+
+Reactive search hook.
+
+#### `useDeviceManager()`
+
+Device management hook for cross-device synchronization.
+
+```typescript
+const {
+  currentDevice,     // Current device information
+  allDevices,        // All known devices
+  onlineDevices,     // Currently online devices
+  updateLastSeen,    // Update device presence
+  isLoading,
+  error
+} = useDeviceManager()
+```
+
+## Cross-Device Synchronization
+
+### Device Management
+
+```typescript
+// Get current device information
+const currentDevice = await db.getCurrentDevice()
+// {
+//   deviceId: "unique-fingerprint",
+//   deviceName: "Windows Chrome",
+//   platform: "Win32",
+//   os: "Windows 10",
+//   browser: "Chrome",
+//   capabilities: ["offline", "encryption"],
+//   createdAt: Date,
+//   lastSeen: Date
+// }
+
+// Get all known devices
+const allDevices = await db.getAllDevices()
+
+// Get online devices
+const onlineDevices = await syncManager.getOnlineDevices()
+
+// Update device presence
+await db.getDeviceManager().updateLastSeen()
+```
+
+### Device-Aware Conflict Resolution
+
+The sync system now includes device-aware conflict resolution that prefers:
+1. **Online devices** over offline devices
+2. **Most recent timestamps** as fallback
+3. **Local device** when all else is equal
+
+### Device Presence Tracking
+
+```typescript
+// Start presence tracking (heartbeat every 30 seconds)
+await db.startDevicePresenceTracking(30000)
+
+// Get device status
+const status = await syncManager.getDeviceStatus(deviceId)
+// "online" | "offline"
 ```
 
 #### `useSearch(options)`
