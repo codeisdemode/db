@@ -19,6 +19,44 @@
 - 📱 **Offline First** - Works completely client-side
 - 🤝 **Cross-Device Sync** - Multi-device synchronization with conflict resolution
 - 🛠️ **Developer Tools** - Built-in database inspector
+- 🔄 **Zod 4.1 Codecs** - Bi-directional data transformations with automatic serialization
+
+## Zod 4.1 Codec Integration
+
+Columnist now leverages Zod 4.1's new codec API for seamless bi-directional data transformations:
+
+```typescript
+import { defineTable } from 'columnist-db-core'
+import { z } from 'zod'
+
+// Define a table with automatic Date and JSON transformations
+const userTable = defineTable()
+  .column('id', 'number')
+  .column('name', 'string')
+  .column('createdAt', 'date')
+  .column('preferences', 'json')
+  .primaryKey('id')
+  .codec() // Creates automatic codec for Date ↔ ISO string and JSON ↔ string
+
+// Dates and JSON objects are automatically converted:
+await db.insert({
+  name: "John Doe",
+  createdAt: new Date(), // Automatically converted to ISO string for storage
+  preferences: { theme: 'dark', notifications: true } // Automatically stringified
+})
+
+// When retrieved, they're automatically converted back:
+const user = await db.find({ where: { name: "John Doe" } })
+console.log(user.createdAt instanceof Date) // true
+console.log(typeof user.preferences) // object
+```
+
+### Supported Codecs
+
+- **Date Codec**: Automatic `Date` ↔ ISO string conversion
+- **JSON Codec**: Automatic object ↔ JSON string conversion  
+- **BigInt Codec**: Automatic `BigInt` ↔ string conversion
+- **Custom Codecs**: Create your own with Zod's `z.codec()` API
 
 ## Quick Start
 
