@@ -153,6 +153,11 @@ export interface InsertResult {
   id: number
 }
 
+export interface BulkOperationResult {
+  success: number
+  errors: Array<{ error: Error; record: any }>
+}
+
 interface TableStats {
   count: number
   totalBytes: number
@@ -352,6 +357,22 @@ export interface TypedColumnistDB<Schema extends SchemaDefinition> {
     updates: Partial<Omit<InferTableType<Schema[K]>, "id">>, 
     table: K
   ): Promise<void>
+  
+  // Bulk operations
+  bulkInsert<K extends keyof Schema>(
+    records: Omit<InferTableType<Schema[K]>, "id">[], 
+    table: K
+  ): Promise<BulkOperationResult>
+  
+  bulkUpdate<K extends keyof Schema>(
+    updates: Array<{ id: number; updates: Partial<Omit<InferTableType<Schema[K]>, "id">> }>,
+    table: K
+  ): Promise<BulkOperationResult>
+  
+  bulkDelete<K extends keyof Schema>(
+    ids: number[],
+    table: K
+  ): Promise<BulkOperationResult>
   
   // Find with proper typing
   find<K extends keyof Schema>(
@@ -836,6 +857,166 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
     }
   }
 
+  /**
+   * Bulk insert multiple records with optimized performance
+   */
+  async bulkInsert<T extends Record<string, unknown>>(records: T[], table?: string): Promise<BulkOperationResult> {
+    this.ensureDb()
+    const tableName = table || DEFAULT_TABLE
+    const def = this.ensureTable(tableName)
+    
+    const result: BulkOperationResult = { success: 0, errors: [] }
+    
+    if (records.length === 0) {
+      return result
+    }
+    
+    const stores = [tableName, indexStoreName(tableName), META_STATS_STORE]
+    if (def.vector) stores.push(vectorStoreName(tableName))
+    const tx = this.db!.transaction(stores, "readwrite")
+    const store = tx.objectStore(tableName)
+    const iiStore = tx.objectStore(indexStoreName(tableName))
+    const statsStore = tx.objectStore(META_STATS_STORE)
+    
+    const searchable = (def.searchableFields && def.searchableFields.length > 0)
+      ? def.searchableFields
+      : Object.entries(def.columns)
+          .filter(([, t]) => t === "string")
+          .map(([name]) => name)
+    
+    for (const record of records) {
+      try {
+        // Check authentication
+        if (!this.checkAuth('insert', tableName, record)) {
+          throw new Error('Insert operation not authorized')
+        }
+        
+        // Validate record
+        const validatedRecord = this.validateRecord(record, def)
+        
+        // Encrypt sensitive fields
+        const encryptedRecord = await this.encryptSensitiveFields(validatedRecord, def)
+        
+        // Normalize for storage
+        const normalized: Record<string, unknown> = {}
+        for (const [k, v] of Object.entries(encryptedRecord)) {
+          const colType = def.columns[k]
+          normalized[k] = colType === "date" ? toISO(v) : v
+        }
+        
+        const id = await requestToPromise(store.add(normalized as any)) as unknown as number
+        
+        // Build inverted index
+        const tokens = new Set<string>()
+        for (const field of searchable) {
+          const raw = (record as any)[field]
+          if (typeof raw === "string") {
+            for (const tok of tokenize(raw)) tokens.add(tok)
+          }
+        }
+        
+        for (const token of tokens) {
+          const existing = await requestToPromise<{ token: string; ids: number[] } | undefined>(iiStore.get(token))
+          if (existing) {
+            if (!existing.ids.includes(id)) existing.ids.push(id)
+            await requestToPromise(iiStore.put(existing))
+          } else {
+            await requestToPromise(iiStore.put({ token, ids: [id] }))
+          }
+        }
+        
+        // Update stats
+        const key = statsKeyFor(tableName)
+        const prev = await requestToPromise<{ key: string; value: TableStats } | undefined>(statsStore.get(key))
+        const bytes = JSON.stringify(normalized).length
+        const nextStats: TableStats = {
+          count: (prev?.value.count ?? 0) + 1,
+          totalBytes: (prev?.value.totalBytes ?? 0) + bytes,
+        }
+        await requestToPromise(statsStore.put({ key, value: nextStats }))
+        
+        result.success++
+        
+        // Notify subscribers
+        this.notify(tableName, { table: tableName, type: "insert", record: { ...(record as any), id } })
+        this.trackSyncChange(tableName, 'insert', { ...(record as any), id })
+        
+      } catch (error) {
+        result.errors.push({ error: error as Error, record })
+      }
+    }
+    
+    await awaitTransaction(tx)
+    return result
+  }
+
+  /**
+   * Bulk update multiple records with optimized performance
+   */
+  async bulkUpdate<T extends Record<string, unknown>>(
+    updates: Array<{ id: number; updates: Partial<T> }>, 
+    table?: string
+  ): Promise<BulkOperationResult> {
+    this.ensureDb()
+    const tableName = table || DEFAULT_TABLE
+    const def = this.ensureTable(tableName)
+    
+    const result: BulkOperationResult = { success: 0, errors: [] }
+    
+    if (updates.length === 0) {
+      return result
+    }
+    
+    const stores = [tableName, indexStoreName(tableName), META_STATS_STORE]
+    if (def.vector) stores.push(vectorStoreName(tableName))
+    const tx = this.db!.transaction(stores, "readwrite")
+    const store = tx.objectStore(tableName)
+    
+    for (const { id, updates: updateData } of updates) {
+      try {
+        await this.update(id, updateData, tableName)
+        result.success++
+      } catch (error) {
+        result.errors.push({ error: error as Error, record: { id, updates: updateData } })
+      }
+    }
+    
+    await awaitTransaction(tx)
+    return result
+  }
+
+  /**
+   * Bulk delete multiple records with optimized performance
+   */
+  async bulkDelete(ids: number[], table?: string): Promise<BulkOperationResult> {
+    this.ensureDb()
+    const tableName = table || DEFAULT_TABLE
+    const def = this.ensureTable(tableName)
+    
+    const result: BulkOperationResult = { success: 0, errors: [] }
+    
+    if (ids.length === 0) {
+      return result
+    }
+    
+    const stores = [tableName, indexStoreName(tableName), META_STATS_STORE]
+    if (def.vector) stores.push(vectorStoreName(tableName))
+    const tx = this.db!.transaction(stores, "readwrite")
+    const store = tx.objectStore(tableName)
+    
+    for (const id of ids) {
+      try {
+        await this.delete(id, tableName)
+        result.success++
+      } catch (error) {
+        result.errors.push({ error: error as Error, record: { id } })
+      }
+    }
+    
+    await awaitTransaction(tx)
+    return result
+  }
+
   async insert<T extends Record<string, unknown>>(record: T, table?: string): Promise<InsertResult> {
     this.ensureDb()
     const tableName = table || DEFAULT_TABLE
@@ -894,7 +1075,6 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
     // Persist vector embedding if configured
     if (def.vector) {
       const embedder = this.vectorEmbedders.get(tableName)
-      console.log(`Looking for embedder for table: ${tableName}, found: ${!!embedder}`)
       if (embedder) {
         const source = (record as any)[def.vector.field]
         if (typeof source === "string" && source.trim().length > 0) {
@@ -904,8 +1084,6 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
           }
           const vStore = tx.objectStore(vectorStoreName(tableName))
           await requestToPromise(vStore.put({ id, vector: Array.from(vec) }))
-          console.log("Stored vector for id:", id, "from text:", source.substring(0, 50))
-          console.log("Vector stored in store:", vectorStoreName(tableName))
         }
       }
     }
@@ -1190,7 +1368,6 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
   registerEmbedder(table: string, embedder: (input: string) => Promise<Float32Array>): void {
     this.ensureTable(table)
     this.vectorEmbedders.set(table, embedder)
-    console.log(`Embedder registered for table: ${table}`)
   }
 
   // Security audit: Check for potential security issues
@@ -1599,19 +1776,15 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
 
     // Fallback to full scan if IVF is disabled or failed
     if (results.length === 0) {
-      console.log("Performing full vector scan...")
-      console.log("Vector store name:", vectorStoreName(table))
       await new Promise<void>((resolve, reject) => {
         const req = vStore.openCursor()
         req.onsuccess = async () => {
           const cursor = req.result
           if (!cursor) {
-            console.log("Vector scan completed, found", results.length, "vectors")
             resolve()
             return
           }
           const { id, vector } = cursor.value as { id: number; vector: number[] }
-          console.log("Processing vector for id:", id, "vector length:", vector.length)
           const v = new Float32Array(vector)
           let score = 0
           if (metric === "cosine") score = dot(inputVector, v) / (inputNorm * norm(v) || 1)
@@ -1852,7 +2025,16 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
         this.search(query, { ...options, table: options.table as string }) as Promise<(InferTableType<S[K]> & { score: number })[]>,
       
       getAll: <K extends keyof S>(table: K, limit?: number) => 
-        this.getAll(table as string, limit) as Promise<InferTableType<S[K]>[]>
+        this.getAll(table as string, limit) as Promise<InferTableType<S[K]>[]>,
+      
+      bulkInsert: <K extends keyof S>(records: Omit<InferTableType<S[K]>, "id">[], table: K) => 
+        this.bulkInsert(records as any[], table as string),
+      
+      bulkUpdate: <K extends keyof S>(updates: Array<{ id: number; updates: Partial<Omit<InferTableType<S[K]>, "id">> }>, table: K) => 
+        this.bulkUpdate(updates as any[], table as string),
+      
+      bulkDelete: <K extends keyof S>(ids: number[], table: K) => 
+        this.bulkDelete(ids, table as string)
     }
   }
 
