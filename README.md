@@ -1,8 +1,8 @@
-# @columnist/db
+# columnist-db
 
-> Lightning-fast, semantic-ready client-side database with IndexedDB persistence, full-text search, vector search, and React hooks.
+> Lightning-fast, semantic-ready client-side database with IndexedDB persistence, full-text search, vector search, React hooks, and cross-device synchronization.
 
-[![NPM Version](https://img.shields.io/npm/v/@columnist/db)](https://npmjs.com/package/@columnist/db)
+[![NPM Version](https://img.shields.io/npm/v/columnist-db)](https://npmjs.com/package/columnist-db)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org/)
 
@@ -23,13 +23,29 @@
 ## Quick Start
 
 ```bash
-npm install @columnist/db zod
+npm install columnist-db zod
+```
+
+### Modular Installation (shadcn-style)
+
+```bash
+# Install only what you need
+npm install @columnist/core @columnist/hooks
+
+# Add specific table packages
+npm install @columnist/tables-notes @columnist/tables-tasks
+
+# Add sync plugins
+npm install @columnist/plugins-convex-sync @columnist/plugins-openai-embedding
 ```
 
 ### Basic Usage
 
 ```typescript
-import { Columnist, defineTable } from '@columnist/db'
+import { Columnist, defineTable } from 'columnist-db'
+// or for modular approach:
+import { Columnist } from '@columnist/core'
+import { defineTable } from '@columnist/tables-core'
 import { z } from 'zod'
 
 // Define your schema
@@ -77,7 +93,9 @@ const recent = await db.find({
 ### React Integration
 
 ```typescript
-import { useColumnist, useLiveQuery } from '@columnist/db/hooks'
+import { useColumnist, useLiveQuery } from 'columnist-db/hooks'
+// or for modular approach:
+import { useColumnist, useLiveQuery } from '@columnist/hooks'
 
 function ChatApp() {
   const { insert, isLoading, error } = useColumnist({
@@ -282,9 +300,63 @@ const {
 } = useDeviceManager()
 ```
 
-## Cross-Device Synchronization
+## Advanced Features
 
-### Device Management
+### Cross-Device Synchronization
+
+**Real-time sync across multiple devices with intelligent conflict resolution:**
+
+```typescript
+// Get current device information
+const deviceManager = await db.getDeviceManager()
+const currentDevice = await deviceManager.getCurrentDevice()
+
+// Device-aware conflict resolution prefers:
+// 1. Online devices over offline devices  
+// 2. Most recent timestamps as fallback
+// 3. Local device when all else is equal
+
+// Track device presence with heartbeat
+await deviceManager.startPresenceTracking(30000) // 30s heartbeat
+
+// Get all known devices
+const allDevices = await deviceManager.getAllDevices()
+const onlineDevices = await deviceManager.getOnlineDevices()
+```
+
+### Modular Architecture (shadcn-style)
+
+Columnist now follows a modular, composable architecture inspired by shadcn/ui:
+
+**Core Packages:**
+- `@columnist/core` - Base database functionality
+- `@columnist/hooks` - React hooks for database operations
+
+**Table Packages:**
+- `@columnist/tables-notes` - Pre-built notes table schema
+- `@columnist/tables-tasks` - Pre-built tasks table schema  
+- `@columnist/tables-chat` - Pre-built chat table schema
+
+**Plugin Packages:**
+- `@columnist/plugins-convex-sync` - Sync with Convex backend
+- `@columnist/plugins-openai-embedding` - Vector search with OpenAI
+
+**Usage Pattern:**
+```typescript
+import { notesSchema } from '@columnist/tables-notes'
+import { convexSync } from '@columnist/plugins-convex-sync'
+import { useNotes, useLiveNotes } from '@columnist/hooks'
+
+// Compose your database
+const db = Columnist.init('my-app', {
+  schema: { notes: notesSchema },
+  plugins: [convexSync()]
+})
+
+// Use generated hooks
+const { notes, createNote } = useNotes()
+const liveNotes = useLiveNotes() // Real-time subscription
+```
 
 ```typescript
 // Get current device information
@@ -463,6 +535,23 @@ const db = await Columnist.init("my-app", {
 - **Delta-based statistics** tracking
 - **Efficient schema evolution**
 
+## Showcase Application
+
+A complete demonstration app is included in the `/showcase` directory, featuring:
+
+- **Real-time CRUD operations** with automatic UI updates
+- **Cross-device synchronization** demo with multiple device simulation
+- **Advanced search capabilities** including full-text and vector search
+- **Device management interface** showing online/offline status
+- **Performance metrics** and memory usage monitoring
+
+To run the showcase:
+```bash
+cd showcase
+npm install
+npm run dev
+```
+
 ## Examples
 
 ### Chat Application
@@ -524,12 +613,16 @@ const similar = await db.vectorSearch("documents", queryEmbedding, {
 
 ## Browser Support
 
-- Chrome 58+
-- Firefox 55+
-- Safari 10+
-- Edge 79+
+- Chrome 58+ (full functionality)
+- Firefox 55+ (full functionality)  
+- Safari 10+ (full functionality)
+- Edge 79+ (full functionality)
+- Mobile browsers with IndexedDB support
 
-Requires IndexedDB support.
+**Cross-device sync requires:**
+- Modern browser with IndexedDB and crypto support
+- Network connectivity for device presence tracking
+- Same-origin or CORS-enabled sync endpoints
 
 ## Contributing
 
