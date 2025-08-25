@@ -1,6 +1,6 @@
 {
-  "name": "@columnist/db",
-  "version": "0.8.0",
+  "name": "columnist-db",
+  "version": "1.1.0",
   "private": false,
   "description": "Lightning-fast, semantic-ready client-side database with IndexedDB persistence, full-text search, vector search, and React hooks",
   "keywords": [

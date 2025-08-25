@@ -216,7 +216,7 @@ export declare class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinit
     subscribe(table: string, fn: Subscriber): () => void;
     typed<S extends Schema = Schema>(): TypedColumnistDB<S>;
     getSyncManager(): SyncManager;
-    getDeviceManager(): import('./sync/device-utils').DeviceManager;
+    getDeviceManager(): Promise<import('./sync/device-utils').DeviceManager>;
     registerSyncAdapter(name: string, type: 'firebase' | 'supabase' | 'rest', options: any): Promise<void>;
     startSync(name?: string): Promise<void>;
     stopSync(name?: string): void;

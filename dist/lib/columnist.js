@@ -1108,8 +1108,12 @@ class ColumnistDB {
         // Gather candidate ids. If no tokens, consider full scan.
         const candidateIds = idToScore.size > 0 ? Array.from(idToScore.keys()) : await this.collectAllIds(table);
         const results = [];
+        // Process each record with individual transactions to avoid timeout
         for (const id of candidateIds) {
-            const rec = await requestToPromise(tableStore.get(id));
+            // Create a new transaction for each record to avoid transaction completion issues
+            const singleTx = this.db.transaction([table], "readonly");
+            const singleStore = singleTx.objectStore(table);
+            const rec = await requestToPromise(singleStore.get(id));
             if (!rec)
                 continue;
             rec.id = id;
@@ -1707,9 +1711,12 @@ class ColumnistDB {
         return this.syncManager;
     }
     // Device management methods
-    getDeviceManager() {
-        const { getDeviceManager } = require('./sync/device-utils');
-        return getDeviceManager(this);
+    async getDeviceManager() {
+        if (!globalThis.__deviceManager) {
+            const { getDeviceManager } = await Promise.resolve().then(() => __importStar(require('./sync/device-utils')));
+            globalThis.__deviceManager = getDeviceManager(this);
+        }
+        return globalThis.__deviceManager;
     }
     async registerSyncAdapter(name, type, options) {
         const { createSyncAdapter } = await Promise.resolve().then(() => __importStar(require('./sync')));
@@ -1758,16 +1765,20 @@ class ColumnistDB {
     }
     // Device management public methods
     async getCurrentDevice() {
-        return this.getDeviceManager().getCurrentDevice();
+        const deviceManager = await this.getDeviceManager();
+        return deviceManager.getCurrentDevice();
     }
     async getAllDevices() {
-        return this.getDeviceManager().getAllDevices();
+        const deviceManager = await this.getDeviceManager();
+        return deviceManager.getAllDevices();
     }
     async getOnlineDevices() {
-        return this.getDeviceManager().getOnlineDevices();
+        const deviceManager = await this.getDeviceManager();
+        return deviceManager.getOnlineDevices();
     }
     async startDevicePresenceTracking(heartbeatInterval = 30000) {
-        return this.getDeviceManager().startPresenceTracking(heartbeatInterval);
+        const deviceManager = await this.getDeviceManager();
+        return deviceManager.startPresenceTracking(heartbeatInterval);
     }
     // Internal helpers
     notify(table, event) {

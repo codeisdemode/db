@@ -1344,8 +1344,14 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
     const candidateIds = idToScore.size > 0 ? Array.from(idToScore.keys()) : await this.collectAllIds(table)
 
     const results: (T & { id: number; score: number })[] = []
+    
+    // Process each record with individual transactions to avoid timeout
     for (const id of candidateIds) {
-      const rec: any = await requestToPromise(tableStore.get(id))
+      // Create a new transaction for each record to avoid transaction completion issues
+      const singleTx = this.db!.transaction([table], "readonly")
+      const singleStore = singleTx.objectStore(table)
+      
+      const rec: any = await requestToPromise(singleStore.get(id))
       if (!rec) continue
       rec.id = id
 
@@ -2047,9 +2053,12 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
   }
 
   // Device management methods
-  getDeviceManager(): import('./sync/device-utils').DeviceManager {
-    const { getDeviceManager } = require('./sync/device-utils');
-    return getDeviceManager(this);
+  async getDeviceManager(): Promise<import('./sync/device-utils').DeviceManager> {
+    if (!(globalThis as any).__deviceManager) {
+      const { getDeviceManager } = await import('./sync/device-utils');
+      (globalThis as any).__deviceManager = getDeviceManager(this);
+    }
+    return (globalThis as any).__deviceManager;
   }
 
   async registerSyncAdapter(name: string, type: 'firebase' | 'supabase' | 'rest', options: any): Promise<void> {
@@ -2102,19 +2111,23 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
 
   // Device management public methods
   async getCurrentDevice(): Promise<import('./sync/device-utils').DeviceInfo> {
-    return this.getDeviceManager().getCurrentDevice();
+    const deviceManager = await this.getDeviceManager();
+    return deviceManager.getCurrentDevice();
   }
 
   async getAllDevices(): Promise<import('./sync/device-utils').DeviceInfo[]> {
-    return this.getDeviceManager().getAllDevices();
+    const deviceManager = await this.getDeviceManager();
+    return deviceManager.getAllDevices();
   }
 
   async getOnlineDevices(): Promise<import('./sync/device-utils').DeviceInfo[]> {
-    return this.getDeviceManager().getOnlineDevices();
+    const deviceManager = await this.getDeviceManager();
+    return deviceManager.getOnlineDevices();
   }
 
   async startDevicePresenceTracking(heartbeatInterval: number = 30000): Promise<void> {
-    return this.getDeviceManager().startPresenceTracking(heartbeatInterval);
+    const deviceManager = await this.getDeviceManager();
+    return deviceManager.startPresenceTracking(heartbeatInterval);
   }
 
   // Internal helpers
