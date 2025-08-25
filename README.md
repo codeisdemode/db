@@ -26,18 +26,15 @@
 npm install columnist-db zod
 ```
 
-### Modular Installation (shadcn-style)
+### Future Modular Installation (Planned)
+
+The modular shadcn-style architecture is under development. Currently, install the complete package:
 
 ```bash
-# Install only what you need
-npm install @columnist/core @columnist/hooks
-
-# Add specific table packages
-npm install @columnist/tables-notes @columnist/tables-tasks
-
-# Add sync plugins
-npm install @columnist/plugins-convex-sync @columnist/plugins-openai-embedding
+npm install columnist-db zod
 ```
+
+*Modular packages (`@columnist/core`, `@columnist/hooks`, `@columnist/tables-*`, `@columnist/plugins-*`) will be available in future releases.*
 
 ### Basic Usage
 
@@ -324,9 +321,9 @@ const allDevices = await deviceManager.getAllDevices()
 const onlineDevices = await deviceManager.getOnlineDevices()
 ```
 
-### Modular Architecture (shadcn-style)
+### Planned Modular Architecture (shadcn-style)
 
-Columnist now follows a modular, composable architecture inspired by shadcn/ui:
+Columnist will follow a modular, composable architecture inspired by shadcn/ui in future releases:
 
 **Core Packages:**
 - `@columnist/core` - Base database functionality
@@ -341,8 +338,9 @@ Columnist now follows a modular, composable architecture inspired by shadcn/ui:
 - `@columnist/plugins-convex-sync` - Sync with Convex backend
 - `@columnist/plugins-openai-embedding` - Vector search with OpenAI
 
-**Usage Pattern:**
+**Planned Usage Pattern:**
 ```typescript
+// Future modular usage (not yet available)
 import { notesSchema } from '@columnist/tables-notes'
 import { convexSync } from '@columnist/plugins-convex-sync'
 import { useNotes, useLiveNotes } from '@columnist/hooks'
