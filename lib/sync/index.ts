@@ -1,19 +1,23 @@
 export * from './base-adapter';
 export * from './types';
 
-export { FirebaseSyncAdapter } from './adapters/firebase-adapter';
-export { SupabaseSyncAdapter } from './adapters/supabase-adapter';
-export { RESTfulSyncAdapter } from './adapters/rest-adapter';
+// Export adapter types separately to avoid circular dependencies
+export type { FirebaseSyncAdapter } from './adapters/firebase-adapter';
+export type { SupabaseSyncAdapter } from './adapters/supabase-adapter';
+export type { RESTfulSyncAdapter } from './adapters/rest-adapter';
 
 import { ColumnistDB } from '../columnist';
 import { BaseSyncAdapter, SyncOptions } from './base-adapter';
+import { getDeviceManager } from './device-utils';
 
 export class SyncManager {
   private adapters: Map<string, BaseSyncAdapter> = new Map();
   private db: ColumnistDB;
+  private deviceManager: import('./device-utils').DeviceManager;
 
   constructor(db: ColumnistDB) {
     this.db = db;
+    this.deviceManager = getDeviceManager(db);
   }
 
   /**
@@ -83,6 +87,34 @@ export class SyncManager {
   }
 
   /**
+   * Get device manager instance
+   */
+  getDeviceManager(): import('./device-utils').DeviceManager {
+    return this.deviceManager;
+  }
+
+  /**
+   * Get online devices across all sync adapters
+   */
+  async getOnlineDevices(): Promise<import('./device-utils').DeviceInfo[]> {
+    return this.deviceManager.getOnlineDevices();
+  }
+
+  /**
+   * Get device status
+   */
+  async getDeviceStatus(deviceId: string): Promise<'online' | 'offline'> {
+    return this.deviceManager.getDeviceStatus(deviceId);
+  }
+
+  /**
+   * Start device presence tracking
+   */
+  async startDevicePresenceTracking(heartbeatInterval: number = 30000): Promise<void> {
+    return this.deviceManager.startPresenceTracking(heartbeatInterval);
+  }
+
+  /**
    * Dispose all resources
    */
   dispose(): void {
@@ -106,16 +138,17 @@ export function createSyncAdapter(
 
   switch (type) {
     case 'firebase':
-      const { FirebaseSyncAdapter } = require('./adapters/firebase-adapter');
-      adapter = new FirebaseSyncAdapter(db, options);
+      // Dynamic import to avoid circular dependencies
+      const firebaseModule = require('./adapters/firebase-adapter');
+      adapter = new firebaseModule.FirebaseSyncAdapter(db, options);
       break;
     case 'supabase':
-      const { SupabaseSyncAdapter } = require('./adapters/supabase-adapter');
-      adapter = new SupabaseSyncAdapter(db, options);
+      const supabaseModule = require('./adapters/supabase-adapter');
+      adapter = new supabaseModule.SupabaseSyncAdapter(db, options);
       break;
     case 'rest':
-      const { RESTfulSyncAdapter } = require('./adapters/rest-adapter');
-      adapter = new RESTfulSyncAdapter(db, options);
+      const restModule = require('./adapters/rest-adapter');
+      adapter = new restModule.RESTfulSyncAdapter(db, options);
       break;
     default:
       throw new Error(`Unsupported sync adapter type: ${type}`);

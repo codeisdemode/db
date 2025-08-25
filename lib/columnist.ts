@@ -2046,6 +2046,12 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
     return this.syncManager
   }
 
+  // Device management methods
+  getDeviceManager(): import('./sync/device-utils').DeviceManager {
+    const { getDeviceManager } = require('./sync/device-utils');
+    return getDeviceManager(this);
+  }
+
   async registerSyncAdapter(name: string, type: 'firebase' | 'supabase' | 'rest', options: any): Promise<void> {
     const { createSyncAdapter } = await import('./sync');
     const adapter = createSyncAdapter(this, type, { ...options, name });
@@ -2092,6 +2098,23 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
     for (const adapter of this.getSyncManager().getAllAdapters()) {
       adapter.trackChange(table, type, record);
     }
+  }
+
+  // Device management public methods
+  async getCurrentDevice(): Promise<import('./sync/device-utils').DeviceInfo> {
+    return this.getDeviceManager().getCurrentDevice();
+  }
+
+  async getAllDevices(): Promise<import('./sync/device-utils').DeviceInfo[]> {
+    return this.getDeviceManager().getAllDevices();
+  }
+
+  async getOnlineDevices(): Promise<import('./sync/device-utils').DeviceInfo[]> {
+    return this.getDeviceManager().getOnlineDevices();
+  }
+
+  async startDevicePresenceTracking(heartbeatInterval: number = 30000): Promise<void> {
+    return this.getDeviceManager().startPresenceTracking(heartbeatInterval);
   }
 
   // Internal helpers

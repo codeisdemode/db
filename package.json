@@ -1,6 +1,7 @@
 {
-  "name": "@columnist/db",
-  "version": "1.0.1",
+  "name": "@columnist/monorepo",
+  "version": "0.0.0-monorepo",
+  "private": true,
   "description": "Lightning-fast, semantic-ready client-side database with IndexedDB persistence, full-text search, vector search, and React hooks",
   "keywords": [
     "database",
@@ -18,7 +19,7 @@
   "homepage": "https://columnist.live",
   "repository": {
     "type": "git",
-    "url": "https://github.com/codeisdemode/db"
+    "url": "git+https://github.com/codeisdemode/db.git"
   },
   "bugs": {
     "url": "https://github.com/codeisdemode/db/issues"
@@ -145,5 +146,8 @@
     "tailwindcss": "^3.4.17",
     "ts-jest": "^29.4.1",
     "typescript": "^5.9.2"
+  },
+  "directories": {
+    "lib": "lib"
   }
 }

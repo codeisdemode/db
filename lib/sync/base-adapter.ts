@@ -1,4 +1,5 @@
 import { ColumnistDB } from '../columnist';
+import { getDeviceManager } from './device-utils';
 
 export interface SyncOptions {
   /** Sync interval in milliseconds (default: 5000) */
@@ -6,7 +7,7 @@ export interface SyncOptions {
   /** Whether to enable real-time sync (default: false) */
   realtime?: boolean;
   /** Conflict resolution strategy (default: 'local-wins') */
-  conflictStrategy?: 'local-wins' | 'remote-wins' | 'merge' | 'custom';
+  conflictStrategy?: 'local-wins' | 'remote-wins' | 'merge' | 'custom' | 'device-aware';
   /** Custom conflict resolver function */
   conflictResolver?: (local: any, remote: any) => any;
   /** Tables to sync (default: all tables) */
@@ -53,6 +54,7 @@ export abstract class BaseSyncAdapter {
   protected syncInterval?: NodeJS.Timeout;
   protected pendingChanges: Map<string, ChangeSet> = new Map();
   protected listeners: Set<(event: SyncEvent) => void> = new Set();
+  protected deviceManager: import('./device-utils').DeviceManager;
 
   constructor(db: ColumnistDB, options: SyncOptions = {}) {
     this.db = db;
@@ -70,6 +72,8 @@ export abstract class BaseSyncAdapter {
       pendingChanges: 0,
       tables: {}
     };
+    
+    this.deviceManager = getDeviceManager(db);
   }
 
   /**
@@ -277,6 +281,11 @@ export abstract class BaseSyncAdapter {
       data: { local, remote }
     });
 
+    // Enhanced conflict resolution with device awareness
+    if (this.options.conflictStrategy === 'device-aware') {
+      return this.resolveDeviceAwareConflict(local, remote);
+    }
+
     switch (this.options.conflictStrategy) {
       case 'local-wins':
         return local;
@@ -292,6 +301,74 @@ export abstract class BaseSyncAdapter {
       default:
         return local;
     }
+  }
+
+  /**
+   * Device-aware conflict resolution that considers device online status
+   */
+  protected async resolveDeviceAwareConflict(local: any, remote: any): Promise<any> {
+    try {
+      // Extract device information from records if available
+      const localDeviceId = local._deviceId || local.deviceId;
+      const remoteDeviceId = remote._deviceId || remote.deviceId;
+      
+      // If we have device IDs, check their online status
+      if (localDeviceId && remoteDeviceId) {
+        const [localStatus, remoteStatus] = await Promise.all([
+          this.deviceManager.getDeviceStatus(localDeviceId),
+          this.deviceManager.getDeviceStatus(remoteDeviceId)
+        ]);
+        
+        // Prefer changes from online devices over offline devices
+        if (localStatus === 'online' && remoteStatus === 'offline') {
+          return local;
+        } else if (localStatus === 'offline' && remoteStatus === 'online') {
+          return remote;
+        }
+        
+        // If both online or both offline, fall back to timestamp-based resolution
+      }
+      
+      // Fall back to timestamp-based resolution
+      return this.resolveTimestampConflict(local, remote);
+      
+    } catch (error) {
+      console.warn('Device-aware conflict resolution failed, falling back to timestamp:', error);
+      return this.resolveTimestampConflict(local, remote);
+    }
+  }
+
+  /**
+   * Timestamp-based conflict resolution (fallback)
+   */
+  protected resolveTimestampConflict(local: any, remote: any): any {
+    const localTime = this.getRecordTimestamp(local);
+    const remoteTime = this.getRecordTimestamp(remote);
+    
+    if (localTime && remoteTime) {
+      return localTime > remoteTime ? local : remote;
+    }
+    
+    // If no timestamps available, use local wins as default
+    return local;
+  }
+
+  /**
+   * Extract timestamp from record using common field patterns
+   */
+  protected getRecordTimestamp(record: any): number | null {
+    const timestampFields = ['_lastModified', 'updatedAt', 'createdAt', 'timestamp', 'lastUpdated'];
+    
+    for (const field of timestampFields) {
+      if (record[field]) {
+        const date = new Date(record[field]);
+        if (!isNaN(date.getTime())) {
+          return date.getTime();
+        }
+      }
+    }
+    
+    return null;
   }
 
   /**

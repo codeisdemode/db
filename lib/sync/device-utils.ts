@@ -250,6 +250,80 @@ export class DeviceManager {
   getCurrentDeviceId(): string | null {
     return this.currentDeviceId;
   }
+
+  /**
+   * Start device presence tracking with heartbeat
+   */
+  async startPresenceTracking(heartbeatInterval: number = 30000): Promise<void> {
+    if (typeof window === 'undefined') {
+      console.warn('Presence tracking only available in browser environments');
+      return;
+    }
+
+    // Initial heartbeat
+    await this.updateLastSeen(this.currentDeviceId!);
+
+    // Set up periodic heartbeat
+    setInterval(async () => {
+      if (this.currentDeviceId) {
+        await this.updateLastSeen(this.currentDeviceId);
+      }
+    }, heartbeatInterval);
+
+    // Track online/offline status
+    if (window.addEventListener) {
+      window.addEventListener('online', () => {
+        this.updateDeviceStatus(this.currentDeviceId!, 'online');
+      });
+
+      window.addEventListener('offline', () => {
+        this.updateDeviceStatus(this.currentDeviceId!, 'offline');
+      });
+    }
+
+    console.log('Device presence tracking started');
+  }
+
+  /**
+   * Update device status (online/offline)
+   */
+  private async updateDeviceStatus(deviceId: string, status: 'online' | 'offline'): Promise<void> {
+    try {
+      await this.db.update(deviceId as unknown as number, { 
+        status,
+        lastStatusChange: new Date()
+      }, 'devices');
+    } catch (error) {
+      console.warn('Failed to update device status:', error);
+    }
+  }
+
+  /**
+   * Get online devices
+   */
+  async getOnlineDevices(): Promise<DeviceInfo[]> {
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    
+    const devices = await this.db.find({
+      table: 'devices',
+      where: {
+        lastSeen: { $gte: fiveMinutesAgo }
+      }
+    });
+
+    return devices as DeviceInfo[];
+  }
+
+  /**
+   * Get device status (online if last seen within 5 minutes)
+   */
+  async getDeviceStatus(deviceId: string): Promise<'online' | 'offline'> {
+    const device = await this.getDevice(deviceId);
+    if (!device) return 'offline';
+
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    return device.lastSeen >= fiveMinutesAgo ? 'online' : 'offline';
+  }
 }
 
 /**
