@@ -107,6 +107,27 @@ export function defineTable(): TableSchemaBuilder {
 
 export type SchemaDefinition = Record<string, TableDefinition>
 
+// Device table schema for cross-device synchronization
+export const DeviceTableSchema: TableDefinition = {
+  columns: {
+    deviceId: "string",
+    deviceName: "string", 
+    platform: "string",
+    os: "string",
+    browser: "string",
+    screenResolution: "string",
+    language: "string",
+    timezone: "string",
+    capabilities: "json",
+    createdAt: "date",
+    lastSeen: "date",
+    syncProtocolVersion: "string"
+  },
+  primaryKey: "deviceId",
+  searchableFields: ["deviceName", "platform", "os"],
+  secondaryIndexes: ["createdAt", "lastSeen"]
+};
+
 export interface SearchOptions {
   table?: string
   limit?: number
