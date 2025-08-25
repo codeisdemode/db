@@ -16,19 +16,19 @@ describe('Device Manager', () => {
   let deviceManager: any;
 
   beforeAll(async () => {
-    // Mock browser environment
+    // Mock browser environment with proper typing
     global.navigator = {
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       platform: 'Win32',
       language: 'en-US',
       hardwareConcurrency: 8,
-    };
+    } as any;
     
     global.screen = {
       width: 1920,
       height: 1080,
       colorDepth: 24,
-    };
+    } as any;
 
     db = await Columnist.init('test-device-db', {
       schema: {
@@ -113,7 +113,7 @@ describe('Device Manager', () => {
     expect(devices.length).toBeGreaterThan(0);
     
     const currentDevice = await deviceManager.getCurrentDevice();
-    expect(devices.some(d => d.deviceId === currentDevice.deviceId)).toBe(true);
+    expect(devices.some((d: any) => d.deviceId === currentDevice.deviceId)).toBe(true);
   });
 
   test('should generate friendly device name', () => {

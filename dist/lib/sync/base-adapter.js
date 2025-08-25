@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BaseSyncAdapter = void 0;
+const device_utils_1 = require("./device-utils");
 class BaseSyncAdapter {
     constructor(db, options = {}) {
         this.pendingChanges = new Map();
@@ -19,6 +20,7 @@ class BaseSyncAdapter {
             pendingChanges: 0,
             tables: {}
         };
+        this.deviceManager = (0, device_utils_1.getDeviceManager)(db);
     }
     /**
      * Start synchronization
@@ -184,6 +186,10 @@ class BaseSyncAdapter {
             type: 'conflict',
             data: { local, remote }
         });
+        // Enhanced conflict resolution with device awareness
+        if (this.options.conflictStrategy === 'device-aware') {
+            return this.resolveDeviceAwareConflict(local, remote);
+        }
         switch (this.options.conflictStrategy) {
             case 'local-wins':
                 return local;
@@ -199,6 +205,64 @@ class BaseSyncAdapter {
             default:
                 return local;
         }
+    }
+    /**
+     * Device-aware conflict resolution that considers device online status
+     */
+    async resolveDeviceAwareConflict(local, remote) {
+        try {
+            // Extract device information from records if available
+            const localDeviceId = local._deviceId || local.deviceId;
+            const remoteDeviceId = remote._deviceId || remote.deviceId;
+            // If we have device IDs, check their online status
+            if (localDeviceId && remoteDeviceId) {
+                const [localStatus, remoteStatus] = await Promise.all([
+                    this.deviceManager.getDeviceStatus(localDeviceId),
+                    this.deviceManager.getDeviceStatus(remoteDeviceId)
+                ]);
+                // Prefer changes from online devices over offline devices
+                if (localStatus === 'online' && remoteStatus === 'offline') {
+                    return local;
+                }
+                else if (localStatus === 'offline' && remoteStatus === 'online') {
+                    return remote;
+                }
+                // If both online or both offline, fall back to timestamp-based resolution
+            }
+            // Fall back to timestamp-based resolution
+            return this.resolveTimestampConflict(local, remote);
+        }
+        catch (error) {
+            console.warn('Device-aware conflict resolution failed, falling back to timestamp:', error);
+            return this.resolveTimestampConflict(local, remote);
+        }
+    }
+    /**
+     * Timestamp-based conflict resolution (fallback)
+     */
+    resolveTimestampConflict(local, remote) {
+        const localTime = this.getRecordTimestamp(local);
+        const remoteTime = this.getRecordTimestamp(remote);
+        if (localTime && remoteTime) {
+            return localTime > remoteTime ? local : remote;
+        }
+        // If no timestamps available, use local wins as default
+        return local;
+    }
+    /**
+     * Extract timestamp from record using common field patterns
+     */
+    getRecordTimestamp(record) {
+        const timestampFields = ['_lastModified', 'updatedAt', 'createdAt', 'timestamp', 'lastUpdated'];
+        for (const field of timestampFields) {
+            if (record[field]) {
+                const date = new Date(record[field]);
+                if (!isNaN(date.getTime())) {
+                    return date.getTime();
+                }
+            }
+        }
+        return null;
     }
     /**
      * Smart merge strategy that handles common conflict scenarios

@@ -14,20 +14,16 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SyncManager = exports.RESTfulSyncAdapter = exports.SupabaseSyncAdapter = exports.FirebaseSyncAdapter = void 0;
+exports.SyncManager = void 0;
 exports.createSyncAdapter = createSyncAdapter;
 __exportStar(require("./base-adapter"), exports);
 __exportStar(require("./types"), exports);
-var firebase_adapter_1 = require("./adapters/firebase-adapter");
-Object.defineProperty(exports, "FirebaseSyncAdapter", { enumerable: true, get: function () { return firebase_adapter_1.FirebaseSyncAdapter; } });
-var supabase_adapter_1 = require("./adapters/supabase-adapter");
-Object.defineProperty(exports, "SupabaseSyncAdapter", { enumerable: true, get: function () { return supabase_adapter_1.SupabaseSyncAdapter; } });
-var rest_adapter_1 = require("./adapters/rest-adapter");
-Object.defineProperty(exports, "RESTfulSyncAdapter", { enumerable: true, get: function () { return rest_adapter_1.RESTfulSyncAdapter; } });
+const device_utils_1 = require("./device-utils");
 class SyncManager {
     constructor(db) {
         this.adapters = new Map();
         this.db = db;
+        this.deviceManager = (0, device_utils_1.getDeviceManager)(db);
     }
     /**
      * Register a sync adapter
@@ -86,6 +82,30 @@ class SyncManager {
         return status;
     }
     /**
+     * Get device manager instance
+     */
+    getDeviceManager() {
+        return this.deviceManager;
+    }
+    /**
+     * Get online devices across all sync adapters
+     */
+    async getOnlineDevices() {
+        return this.deviceManager.getOnlineDevices();
+    }
+    /**
+     * Get device status
+     */
+    async getDeviceStatus(deviceId) {
+        return this.deviceManager.getDeviceStatus(deviceId);
+    }
+    /**
+     * Start device presence tracking
+     */
+    async startDevicePresenceTracking(heartbeatInterval = 30000) {
+        return this.deviceManager.startPresenceTracking(heartbeatInterval);
+    }
+    /**
      * Dispose all resources
      */
     dispose() {
@@ -104,16 +124,17 @@ function createSyncAdapter(db, type, options) {
     let adapter;
     switch (type) {
         case 'firebase':
-            const { FirebaseSyncAdapter } = require('./adapters/firebase-adapter');
-            adapter = new FirebaseSyncAdapter(db, options);
+            // Dynamic import to avoid circular dependencies
+            const firebaseModule = require('./adapters/firebase-adapter');
+            adapter = new firebaseModule.FirebaseSyncAdapter(db, options);
             break;
         case 'supabase':
-            const { SupabaseSyncAdapter } = require('./adapters/supabase-adapter');
-            adapter = new SupabaseSyncAdapter(db, options);
+            const supabaseModule = require('./adapters/supabase-adapter');
+            adapter = new supabaseModule.SupabaseSyncAdapter(db, options);
             break;
         case 'rest':
-            const { RESTfulSyncAdapter } = require('./adapters/rest-adapter');
-            adapter = new RESTfulSyncAdapter(db, options);
+            const restModule = require('./adapters/rest-adapter');
+            adapter = new restModule.RESTfulSyncAdapter(db, options);
             break;
         default:
             throw new Error(`Unsupported sync adapter type: ${type}`);

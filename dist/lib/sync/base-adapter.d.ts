@@ -5,7 +5,7 @@ export interface SyncOptions {
     /** Whether to enable real-time sync (default: false) */
     realtime?: boolean;
     /** Conflict resolution strategy (default: 'local-wins') */
-    conflictStrategy?: 'local-wins' | 'remote-wins' | 'merge' | 'custom';
+    conflictStrategy?: 'local-wins' | 'remote-wins' | 'merge' | 'custom' | 'device-aware';
     /** Custom conflict resolver function */
     conflictResolver?: (local: any, remote: any) => any;
     /** Tables to sync (default: all tables) */
@@ -47,6 +47,7 @@ export declare abstract class BaseSyncAdapter {
     protected syncInterval?: NodeJS.Timeout;
     protected pendingChanges: Map<string, ChangeSet>;
     protected listeners: Set<(event: SyncEvent) => void>;
+    protected deviceManager: import('./device-utils').DeviceManager;
     constructor(db: ColumnistDB, options?: SyncOptions);
     /**
      * Initialize the sync adapter
@@ -96,6 +97,18 @@ export declare abstract class BaseSyncAdapter {
      * Resolve conflicts between local and remote changes
      */
     protected resolveConflict(local: any, remote: any): any;
+    /**
+     * Device-aware conflict resolution that considers device online status
+     */
+    protected resolveDeviceAwareConflict(local: any, remote: any): Promise<any>;
+    /**
+     * Timestamp-based conflict resolution (fallback)
+     */
+    protected resolveTimestampConflict(local: any, remote: any): any;
+    /**
+     * Extract timestamp from record using common field patterns
+     */
+    protected getRecordTimestamp(record: any): number | null;
     /**
      * Smart merge strategy that handles common conflict scenarios
      */

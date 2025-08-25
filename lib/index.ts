@@ -4,6 +4,6 @@ import ColumnistDefault from "./columnist"
 export default ColumnistDefault
 
 // Re-export bulk operations interfaces for better DX
-export { BulkOperationResult } from "./columnist";
+export type { BulkOperationResult } from "./columnist";
 
 

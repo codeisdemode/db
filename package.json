@@ -1,7 +1,7 @@
 {
-  "name": "@columnist/monorepo",
-  "version": "0.0.0-monorepo",
-  "private": true,
+  "name": "@columnist/db",
+  "version": "0.8.0",
+  "private": false,
   "description": "Lightning-fast, semantic-ready client-side database with IndexedDB persistence, full-text search, vector search, and React hooks",
   "keywords": [
     "database",

@@ -16,43 +16,43 @@ describe('Device-Sync Integration', () => {
   let syncManager: SyncManager;
 
   beforeAll(async () => {
-    // Mock browser environment
+    // Mock browser environment with proper typing
     global.navigator = {
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       platform: 'Win32',
       language: 'en-US',
       hardwareConcurrency: 8,
-    };
+    } as any;
     
     global.screen = {
       width: 1920,
       height: 1080,
       colorDepth: 24,
-    };
+    } as any;
 
     const schema = {
       users: {
         columns: {
-          id: "number",
-          name: "string",
-          email: "string"
+          id: "number" as const,
+          name: "string" as const,
+          email: "string" as const
         },
         primaryKey: "id"
       },
       devices: {
         columns: {
-          deviceId: "string",
-          deviceName: "string", 
-          platform: "string",
-          os: "string",
-          browser: "string",
-          screenResolution: "string",
-          language: "string",
-          timezone: "string",
-          capabilities: "json",
-          createdAt: "date",
-          lastSeen: "date",
-          syncProtocolVersion: "string"
+          deviceId: "string" as const,
+          deviceName: "string" as const, 
+          platform: "string" as const,
+          os: "string" as const,
+          browser: "string" as const,
+          screenResolution: "string" as const,
+          language: "string" as const,
+          timezone: "string" as const,
+          capabilities: "json" as const,
+          createdAt: "date" as const,
+          lastSeen: "date" as const,
+          syncProtocolVersion: "string" as const
         },
         primaryKey: "deviceId",
         searchableFields: ["deviceName", "platform", "os"],
@@ -95,7 +95,7 @@ describe('Device-Sync Integration', () => {
     expect(devices.length).toBeGreaterThan(0);
     
     const currentDevice = await db.getCurrentDevice();
-    expect(devices.some(d => d.deviceId === currentDevice.deviceId)).toBe(true);
+    expect(devices.some((d: any) => d.deviceId === currentDevice.deviceId)).toBe(true);
   });
 
   test('should get online devices from sync manager', async () => {
@@ -104,7 +104,7 @@ describe('Device-Sync Integration', () => {
     
     // Should include current device since we just created it
     const currentDevice = await db.getCurrentDevice();
-    expect(onlineDevices.some(d => d.deviceId === currentDevice.deviceId)).toBe(true);
+    expect(onlineDevices.some((d: any) => d.deviceId === currentDevice.deviceId)).toBe(true);
   });
 
   test('should get device status from sync manager', async () => {
@@ -177,7 +177,7 @@ describe('Device-Sync Integration', () => {
     expect(onlineDevices).toBeInstanceOf(Array);
     
     // Current device should be in both lists
-    expect(allDevices.some(d => d.deviceId === currentDevice.deviceId)).toBe(true);
-    expect(onlineDevices.some(d => d.deviceId === currentDevice.deviceId)).toBe(true);
+    expect(allDevices.some((d: any) => d.deviceId === currentDevice.deviceId)).toBe(true);
+    expect(onlineDevices.some((d: any) => d.deviceId === currentDevice.deviceId)).toBe(true);
   });
 });

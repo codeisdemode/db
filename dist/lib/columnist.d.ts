@@ -34,6 +34,7 @@ export declare class TableSchemaBuilder<T extends Record<string, ColumnType> = {
 }
 export declare function defineTable(): TableSchemaBuilder;
 export type SchemaDefinition = Record<string, TableDefinition>;
+export declare const DeviceTableSchema: TableDefinition;
 export interface SearchOptions {
     table?: string;
     limit?: number;
@@ -62,6 +63,13 @@ export interface FindOptions {
 export interface InsertResult {
     id: number;
 }
+export interface BulkOperationResult {
+    success: number;
+    errors: Array<{
+        error: Error;
+        record: any;
+    }>;
+}
 interface TableStats {
     count: number;
     totalBytes: number;
@@ -80,6 +88,12 @@ type Subscriber = (event: ChangeEvent) => void;
 export interface TypedColumnistDB<Schema extends SchemaDefinition> {
     insert<K extends keyof Schema>(record: Omit<InferTableType<Schema[K]>, "id">, table: K): Promise<InsertResult>;
     update<K extends keyof Schema>(id: number, updates: Partial<Omit<InferTableType<Schema[K]>, "id">>, table: K): Promise<void>;
+    bulkInsert<K extends keyof Schema>(records: Omit<InferTableType<Schema[K]>, "id">[], table: K): Promise<BulkOperationResult>;
+    bulkUpdate<K extends keyof Schema>(updates: Array<{
+        id: number;
+        updates: Partial<Omit<InferTableType<Schema[K]>, "id">>;
+    }>, table: K): Promise<BulkOperationResult>;
+    bulkDelete<K extends keyof Schema>(ids: number[], table: K): Promise<BulkOperationResult>;
     find<K extends keyof Schema>(options: Omit<FindOptions, "table"> & {
         table: K;
     }): Promise<InferTableType<Schema[K]>[]>;
@@ -119,6 +133,21 @@ export declare class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinit
     update<T extends Record<string, unknown>>(id: number, updates: Partial<T>, table?: string): Promise<void>;
     delete(id: number, table?: string): Promise<void>;
     upsert<T extends Record<string, unknown>>(record: T, table?: string): Promise<InsertResult>;
+    /**
+     * Bulk insert multiple records with optimized performance
+     */
+    bulkInsert<T extends Record<string, unknown>>(records: T[], table?: string): Promise<BulkOperationResult>;
+    /**
+     * Bulk update multiple records with optimized performance
+     */
+    bulkUpdate<T extends Record<string, unknown>>(updates: Array<{
+        id: number;
+        updates: Partial<T>;
+    }>, table?: string): Promise<BulkOperationResult>;
+    /**
+     * Bulk delete multiple records with optimized performance
+     */
+    bulkDelete(ids: number[], table?: string): Promise<BulkOperationResult>;
     insert<T extends Record<string, unknown>>(record: T, table?: string): Promise<InsertResult>;
     getAll<T = unknown>(table: string, limit?: number): Promise<(T & {
         id: number;
@@ -187,6 +216,7 @@ export declare class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinit
     subscribe(table: string, fn: Subscriber): () => void;
     typed<S extends Schema = Schema>(): TypedColumnistDB<S>;
     getSyncManager(): SyncManager;
+    getDeviceManager(): import('./sync/device-utils').DeviceManager;
     registerSyncAdapter(name: string, type: 'firebase' | 'supabase' | 'rest', options: any): Promise<void>;
     startSync(name?: string): Promise<void>;
     stopSync(name?: string): void;
@@ -195,6 +225,10 @@ export declare class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinit
      * Track database changes for synchronization
      */
     private trackSyncChange;
+    getCurrentDevice(): Promise<import('./sync/device-utils').DeviceInfo>;
+    getAllDevices(): Promise<import('./sync/device-utils').DeviceInfo[]>;
+    getOnlineDevices(): Promise<import('./sync/device-utils').DeviceInfo[]>;
+    startDevicePresenceTracking(heartbeatInterval?: number): Promise<void>;
     private notify;
     private ensureDb;
     private ensureTable;

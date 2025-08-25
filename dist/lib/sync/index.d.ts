@@ -1,13 +1,14 @@
 export * from './base-adapter';
 export * from './types';
-export { FirebaseSyncAdapter } from './adapters/firebase-adapter';
-export { SupabaseSyncAdapter } from './adapters/supabase-adapter';
-export { RESTfulSyncAdapter } from './adapters/rest-adapter';
+export type { FirebaseSyncAdapter } from './adapters/firebase-adapter';
+export type { SupabaseSyncAdapter } from './adapters/supabase-adapter';
+export type { RESTfulSyncAdapter } from './adapters/rest-adapter';
 import { ColumnistDB } from '../columnist';
 import { BaseSyncAdapter } from './base-adapter';
 export declare class SyncManager {
     private adapters;
     private db;
+    private deviceManager;
     constructor(db: ColumnistDB);
     /**
      * Register a sync adapter
@@ -37,6 +38,22 @@ export declare class SyncManager {
      * Get status of all sync adapters
      */
     getStatus(): Record<string, any>;
+    /**
+     * Get device manager instance
+     */
+    getDeviceManager(): import('./device-utils').DeviceManager;
+    /**
+     * Get online devices across all sync adapters
+     */
+    getOnlineDevices(): Promise<import('./device-utils').DeviceInfo[]>;
+    /**
+     * Get device status
+     */
+    getDeviceStatus(deviceId: string): Promise<'online' | 'offline'>;
+    /**
+     * Start device presence tracking
+     */
+    startDevicePresenceTracking(heartbeatInterval?: number): Promise<void>;
     /**
      * Dispose all resources
      */

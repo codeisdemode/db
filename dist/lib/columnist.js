@@ -46,7 +46,7 @@ var __classPrivateFieldGet = (this && this.__classPrivateFieldGet) || function (
 };
 var _a, _ColumnistDB_instance;
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Columnist = exports.ColumnistDB = exports.TableSchemaBuilder = void 0;
+exports.Columnist = exports.ColumnistDB = exports.DeviceTableSchema = exports.TableSchemaBuilder = void 0;
 exports.defineTable = defineTable;
 // Columnist: Client-side persisted database on top of IndexedDB with
 // simple schema, insert/query APIs, TF-IDF inverted index search,
@@ -111,6 +111,26 @@ exports.TableSchemaBuilder = TableSchemaBuilder;
 function defineTable() {
     return new TableSchemaBuilder();
 }
+// Device table schema for cross-device synchronization
+exports.DeviceTableSchema = {
+    columns: {
+        deviceId: "string",
+        deviceName: "string",
+        platform: "string",
+        os: "string",
+        browser: "string",
+        screenResolution: "string",
+        language: "string",
+        timezone: "string",
+        capabilities: "json",
+        createdAt: "date",
+        lastSeen: "date",
+        syncProtocolVersion: "string"
+    },
+    primaryKey: "deviceId",
+    searchableFields: ["deviceName", "platform", "os"],
+    secondaryIndexes: ["createdAt", "lastSeen"]
+};
 const META_SCHEMA_STORE = "_meta_schema";
 const META_STATS_STORE = "_meta_stats";
 const DEFAULT_TABLE = "messages";
@@ -663,6 +683,143 @@ class ColumnistDB {
             return await this.insert(record, tableName);
         }
     }
+    /**
+     * Bulk insert multiple records with optimized performance
+     */
+    async bulkInsert(records, table) {
+        this.ensureDb();
+        const tableName = table || DEFAULT_TABLE;
+        const def = this.ensureTable(tableName);
+        const result = { success: 0, errors: [] };
+        if (records.length === 0) {
+            return result;
+        }
+        const stores = [tableName, indexStoreName(tableName), META_STATS_STORE];
+        if (def.vector)
+            stores.push(vectorStoreName(tableName));
+        const tx = this.db.transaction(stores, "readwrite");
+        const store = tx.objectStore(tableName);
+        const iiStore = tx.objectStore(indexStoreName(tableName));
+        const statsStore = tx.objectStore(META_STATS_STORE);
+        const searchable = (def.searchableFields && def.searchableFields.length > 0)
+            ? def.searchableFields
+            : Object.entries(def.columns)
+                .filter(([, t]) => t === "string")
+                .map(([name]) => name);
+        for (const record of records) {
+            try {
+                // Check authentication
+                if (!this.checkAuth('insert', tableName, record)) {
+                    throw new Error('Insert operation not authorized');
+                }
+                // Validate record
+                const validatedRecord = this.validateRecord(record, def);
+                // Encrypt sensitive fields
+                const encryptedRecord = await this.encryptSensitiveFields(validatedRecord, def);
+                // Normalize for storage
+                const normalized = {};
+                for (const [k, v] of Object.entries(encryptedRecord)) {
+                    const colType = def.columns[k];
+                    normalized[k] = colType === "date" ? toISO(v) : v;
+                }
+                const id = await requestToPromise(store.add(normalized));
+                // Build inverted index
+                const tokens = new Set();
+                for (const field of searchable) {
+                    const raw = record[field];
+                    if (typeof raw === "string") {
+                        for (const tok of tokenize(raw))
+                            tokens.add(tok);
+                    }
+                }
+                for (const token of tokens) {
+                    const existing = await requestToPromise(iiStore.get(token));
+                    if (existing) {
+                        if (!existing.ids.includes(id))
+                            existing.ids.push(id);
+                        await requestToPromise(iiStore.put(existing));
+                    }
+                    else {
+                        await requestToPromise(iiStore.put({ token, ids: [id] }));
+                    }
+                }
+                // Update stats
+                const key = statsKeyFor(tableName);
+                const prev = await requestToPromise(statsStore.get(key));
+                const bytes = JSON.stringify(normalized).length;
+                const nextStats = {
+                    count: (prev?.value.count ?? 0) + 1,
+                    totalBytes: (prev?.value.totalBytes ?? 0) + bytes,
+                };
+                await requestToPromise(statsStore.put({ key, value: nextStats }));
+                result.success++;
+                // Notify subscribers
+                this.notify(tableName, { table: tableName, type: "insert", record: { ...record, id } });
+                this.trackSyncChange(tableName, 'insert', { ...record, id });
+            }
+            catch (error) {
+                result.errors.push({ error: error, record });
+            }
+        }
+        await awaitTransaction(tx);
+        return result;
+    }
+    /**
+     * Bulk update multiple records with optimized performance
+     */
+    async bulkUpdate(updates, table) {
+        this.ensureDb();
+        const tableName = table || DEFAULT_TABLE;
+        const def = this.ensureTable(tableName);
+        const result = { success: 0, errors: [] };
+        if (updates.length === 0) {
+            return result;
+        }
+        const stores = [tableName, indexStoreName(tableName), META_STATS_STORE];
+        if (def.vector)
+            stores.push(vectorStoreName(tableName));
+        const tx = this.db.transaction(stores, "readwrite");
+        const store = tx.objectStore(tableName);
+        for (const { id, updates: updateData } of updates) {
+            try {
+                await this.update(id, updateData, tableName);
+                result.success++;
+            }
+            catch (error) {
+                result.errors.push({ error: error, record: { id, updates: updateData } });
+            }
+        }
+        await awaitTransaction(tx);
+        return result;
+    }
+    /**
+     * Bulk delete multiple records with optimized performance
+     */
+    async bulkDelete(ids, table) {
+        this.ensureDb();
+        const tableName = table || DEFAULT_TABLE;
+        const def = this.ensureTable(tableName);
+        const result = { success: 0, errors: [] };
+        if (ids.length === 0) {
+            return result;
+        }
+        const stores = [tableName, indexStoreName(tableName), META_STATS_STORE];
+        if (def.vector)
+            stores.push(vectorStoreName(tableName));
+        const tx = this.db.transaction(stores, "readwrite");
+        const store = tx.objectStore(tableName);
+        for (const id of ids) {
+            try {
+                await this.delete(id, tableName);
+                result.success++;
+            }
+            catch (error) {
+                result.errors.push({ error: error, record: { id } });
+            }
+        }
+        await awaitTransaction(tx);
+        return result;
+    }
     async insert(record, table) {
         this.ensureDb();
         const tableName = table || DEFAULT_TABLE;
@@ -716,7 +873,6 @@ class ColumnistDB {
         // Persist vector embedding if configured
         if (def.vector) {
             const embedder = this.vectorEmbedders.get(tableName);
-            console.log(`Looking for embedder for table: ${tableName}, found: ${!!embedder}`);
             if (embedder) {
                 const source = record[def.vector.field];
                 if (typeof source === "string" && source.trim().length > 0) {
@@ -726,8 +882,6 @@ class ColumnistDB {
                     }
                     const vStore = tx.objectStore(vectorStoreName(tableName));
                     await requestToPromise(vStore.put({ id, vector: Array.from(vec) }));
-                    console.log("Stored vector for id:", id, "from text:", source.substring(0, 50));
-                    console.log("Vector stored in store:", vectorStoreName(tableName));
                 }
             }
         }
@@ -975,7 +1129,6 @@ class ColumnistDB {
     registerEmbedder(table, embedder) {
         this.ensureTable(table);
         this.vectorEmbedders.set(table, embedder);
-        console.log(`Embedder registered for table: ${table}`);
     }
     // Security audit: Check for potential security issues
     async securityAudit() {
@@ -1308,19 +1461,15 @@ class ColumnistDB {
         }
         // Fallback to full scan if IVF is disabled or failed
         if (results.length === 0) {
-            console.log("Performing full vector scan...");
-            console.log("Vector store name:", vectorStoreName(table));
             await new Promise((resolve, reject) => {
                 const req = vStore.openCursor();
                 req.onsuccess = async () => {
                     const cursor = req.result;
                     if (!cursor) {
-                        console.log("Vector scan completed, found", results.length, "vectors");
                         resolve();
                         return;
                     }
                     const { id, vector } = cursor.value;
-                    console.log("Processing vector for id:", id, "vector length:", vector.length);
                     const v = new Float32Array(vector);
                     let score = 0;
                     if (metric === "cosine")
@@ -1544,7 +1693,10 @@ class ColumnistDB {
             update: (id, updates, table) => this.update(id, updates, table),
             find: (options) => this.find({ ...options, table: options.table }),
             search: (query, options) => this.search(query, { ...options, table: options.table }),
-            getAll: (table, limit) => this.getAll(table, limit)
+            getAll: (table, limit) => this.getAll(table, limit),
+            bulkInsert: (records, table) => this.bulkInsert(records, table),
+            bulkUpdate: (updates, table) => this.bulkUpdate(updates, table),
+            bulkDelete: (ids, table) => this.bulkDelete(ids, table)
         };
     }
     // Sync methods
@@ -1553,6 +1705,11 @@ class ColumnistDB {
             this.syncManager = new sync_1.SyncManager(this);
         }
         return this.syncManager;
+    }
+    // Device management methods
+    getDeviceManager() {
+        const { getDeviceManager } = require('./sync/device-utils');
+        return getDeviceManager(this);
     }
     async registerSyncAdapter(name, type, options) {
         const { createSyncAdapter } = await Promise.resolve().then(() => __importStar(require('./sync')));
@@ -1598,6 +1755,19 @@ class ColumnistDB {
         for (const adapter of this.getSyncManager().getAllAdapters()) {
             adapter.trackChange(table, type, record);
         }
+    }
+    // Device management public methods
+    async getCurrentDevice() {
+        return this.getDeviceManager().getCurrentDevice();
+    }
+    async getAllDevices() {
+        return this.getDeviceManager().getAllDevices();
+    }
+    async getOnlineDevices() {
+        return this.getDeviceManager().getOnlineDevices();
+    }
+    async startDevicePresenceTracking(heartbeatInterval = 30000) {
+        return this.getDeviceManager().startPresenceTracking(heartbeatInterval);
     }
     // Internal helpers
     notify(table, event) {
