@@ -34,19 +34,19 @@ Install only what you need:
 
 ```bash
 # Core database engine
-npm install @columnist/core zod
+npm install columnist-db-core zod
 
 # React hooks integration
-npm install @columnist/hooks
+npm install columnist-db-hooks
 
 # Prebuilt table schemas
-npm install @columnist/tables-notes
-npm install @columnist/tables-tasks
-npm install @columnist/tables-chat
+npm install columnist-db-table-notes
+npm install columnist-db-table-tasks
+npm install columnist-db-table-chat
 
 # Plugin extensions
-npm install @columnist/plugins-convex-sync
-npm install @columnist/plugins-openai-embedding
+npm install columnist-db-plugin-convex-sync
+npm install columnist-db-plugin-openai-embedding
 ```
 
 ### Basic Usage
@@ -54,8 +54,8 @@ npm install @columnist/plugins-openai-embedding
 ```typescript
 import { Columnist, defineTable } from 'columnist-db'
 // or for modular approach:
-import { Columnist } from '@columnist/core'
-import { defineTable } from '@columnist/core'
+import { Columnist } from 'columnist-db-core'
+import { defineTable } from 'columnist-db-core'
 import { z } from 'zod'
 
 // Define your schema
@@ -105,7 +105,7 @@ const recent = await db.find({
 ```typescript
 import { useColumnist, useLiveQuery } from 'columnist-db/hooks'
 // or for modular approach:
-import { useColumnist, useLiveQuery } from '@columnist/hooks'
+import { useColumnist, useLiveQuery } from 'columnist-db-hooks'
 
 function ChatApp() {
   const { insert, isLoading, error } = useColumnist({
@@ -339,23 +339,23 @@ const onlineDevices = await deviceManager.getOnlineDevices()
 Columnist follows a modular, composable architecture inspired by shadcn/ui:
 
 **Core Packages:**
-- `@columnist/core` - Base database functionality
-- `@columnist/hooks` - React hooks for database operations
+- `columnist-db-core` - Base database functionality
+- `columnist-db-hooks` - React hooks for database operations
 
 **Table Packages:**
-- `@columnist/tables-notes` - Pre-built notes table schema
-- `@columnist/tables-tasks` - Pre-built tasks table schema  
-- `@columnist/tables-chat` - Pre-built chat table schema
+- `columnist-db-table-notes` - Pre-built notes table schema
+- `columnist-db-table-tasks` - Pre-built tasks table schema  
+- `columnist-db-table-chat` - Pre-built chat table schema
 
 **Plugin Packages:**
-- `@columnist/plugins-convex-sync` - Sync with Convex backend
-- `@columnist/plugins-openai-embedding` - Vector search with OpenAI
+- `columnist-db-plugin-convex-sync` - Sync with Convex backend
+- `columnist-db-plugin-openai-embedding` - Vector search with OpenAI
 
 **Usage Pattern:**
 ```typescript
-import { notesSchema } from '@columnist/tables-notes'
-import { convexSync } from '@columnist/plugins-convex-sync'
-import { useNotes, useLiveNotes } from '@columnist/hooks'
+import { notesSchema } from 'columnist-db-table-notes'
+import { convexSync } from 'columnist-db-plugin-convex-sync'
+import { useNotes, useLiveNotes } from 'columnist-db-hooks'
 
 // Compose your database
 const db = Columnist.init('my-app', {
@@ -452,7 +452,7 @@ const { estimatedRAM } = useMemoryUsage()
 ### Fluent Builder API
 
 ```typescript
-import { defineTable } from '@columnist/core'
+import { defineTable } from 'columnist-db-core'
 import { z } from 'zod'
 
 const messageTable = defineTable()
