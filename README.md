@@ -22,19 +22,32 @@
 
 ## Quick Start
 
-```bash
-npm install columnist-db zod
-```
-
-### Future Modular Installation (Planned)
-
-The modular shadcn-style architecture is under development. Currently, install the complete package:
+### Complete Package (All-in-One)
 
 ```bash
 npm install columnist-db zod
 ```
 
-*Modular packages (`@columnist/core`, `@columnist/hooks`, `@columnist/tables-*`, `@columnist/plugins-*`) will be available in future releases.*
+### Modular Installation (shadcn-style)
+
+Install only what you need:
+
+```bash
+# Core database engine
+npm install @columnist/core zod
+
+# React hooks integration
+npm install @columnist/hooks
+
+# Prebuilt table schemas
+npm install @columnist/tables-notes
+npm install @columnist/tables-tasks
+npm install @columnist/tables-chat
+
+# Plugin extensions
+npm install @columnist/plugins-convex-sync
+npm install @columnist/plugins-openai-embedding
+```
 
 ### Basic Usage
 
@@ -42,7 +55,7 @@ npm install columnist-db zod
 import { Columnist, defineTable } from 'columnist-db'
 // or for modular approach:
 import { Columnist } from '@columnist/core'
-import { defineTable } from '@columnist/tables-core'
+import { defineTable } from '@columnist/core'
 import { z } from 'zod'
 
 // Define your schema
@@ -321,9 +334,9 @@ const allDevices = await deviceManager.getAllDevices()
 const onlineDevices = await deviceManager.getOnlineDevices()
 ```
 
-### Planned Modular Architecture (shadcn-style)
+### Modular Architecture (shadcn-style)
 
-Columnist will follow a modular, composable architecture inspired by shadcn/ui in future releases:
+Columnist follows a modular, composable architecture inspired by shadcn/ui:
 
 **Core Packages:**
 - `@columnist/core` - Base database functionality
@@ -338,9 +351,8 @@ Columnist will follow a modular, composable architecture inspired by shadcn/ui i
 - `@columnist/plugins-convex-sync` - Sync with Convex backend
 - `@columnist/plugins-openai-embedding` - Vector search with OpenAI
 
-**Planned Usage Pattern:**
+**Usage Pattern:**
 ```typescript
-// Future modular usage (not yet available)
 import { notesSchema } from '@columnist/tables-notes'
 import { convexSync } from '@columnist/plugins-convex-sync'
 import { useNotes, useLiveNotes } from '@columnist/hooks'
@@ -440,7 +452,7 @@ const { estimatedRAM } = useMemoryUsage()
 ### Fluent Builder API
 
 ```typescript
-import { defineTable } from '@columnist/db'
+import { defineTable } from '@columnist/core'
 import { z } from 'zod'
 
 const messageTable = defineTable()
@@ -621,6 +633,29 @@ const similar = await db.vectorSearch("documents", queryEmbedding, {
 - Modern browser with IndexedDB and crypto support
 - Network connectivity for device presence tracking
 - Same-origin or CORS-enabled sync endpoints
+
+## Development
+
+This is a monorepo managed with Turborepo. To develop locally:
+
+```bash
+# Install dependencies
+npm install
+
+# Build all packages
+npm run build
+
+# Run tests
+npm test
+
+# Develop a specific package
+cd packages/core
+npm run dev
+
+# Run showcase app
+cd showcase
+npm run dev
+```
 
 ## Contributing
 
