@@ -20,6 +20,7 @@
 - 🤝 **Cross-Device Sync** - Multi-device synchronization with conflict resolution
 - 🛠️ **Developer Tools** - Built-in database inspector
 - 🔄 **Zod 4.1 Codecs** - Bi-directional data transformations with automatic serialization
+- 🤖 **MCP Integration** - Model Context Protocol server for AI integration
 
 ## Zod 4.1 Codec Integration
 
@@ -350,6 +351,38 @@ const {
 
 ## Advanced Features
 
+### Model Context Protocol (MCP) Integration
+
+**Built-in MCP server for AI integration with full database access:**
+
+```typescript
+import { ColumnistMCPServer } from 'columnist-db';
+
+// Start MCP server for AI integration
+const mcpServer = new ColumnistMCPServer({
+  databaseName: 'my-chat-app',
+  authToken: 'your-secret-token',
+  port: 3000
+});
+
+await mcpServer.start();
+
+// AI systems can now access:
+// - Chat message history and context
+// - User profiles and preferences  
+// - Knowledge base content
+// - Real-time conversation data
+// - Semantic search across all tables
+```
+
+**MCP Resource Examples:**
+```
+mcp://columnist/chat-app/messages/?conversation=123&limit=50
+mcp://columnist/chat-app/users/online
+mcp://columnist/chat-app/messages/search?query=project+deadline
+mcp://columnist/knowledge-base/articles/vector?text=AI+ethics
+```
+
 ### Cross-Device Synchronization
 
 **Real-time sync across multiple devices with intelligent conflict resolution:**
@@ -446,6 +479,30 @@ await db.startDevicePresenceTracking(30000)
 // Get device status
 const status = await syncManager.getDeviceStatus(deviceId)
 // "online" | "offline"
+```
+
+### MCP Server Security Features
+
+**Enterprise-grade security for AI database access:**
+
+```typescript
+// JWT Authentication
+const authManager = new AuthManager({
+  secret: process.env.MCP_AUTH_SECRET,
+  requireAuth: true
+});
+
+// Security policies
+const securityManager = new SecurityManager({
+  maxConnections: 100,
+  rateLimit: { windowMs: 60000, max: 100 },
+  blockedTables: ['passwords', 'api_keys'],
+  allowedOperations: ['query', 'search', 'read']
+});
+
+// Field-level security
+const sanitizedData = securityManager.sanitizeOutput(userData, ['admin']);
+// Removes sensitive fields like passwords, tokens, private keys
 ```
 
 #### `useSearch(options)`
