@@ -8,7 +8,7 @@ Columnist provides a flexible synchronization system that allows you to sync you
 Sync with Google Firebase Firestore database.
 
 ```typescript
-import { Columnist, FirebaseSyncAdapter } from '@columnist/core';
+import { Columnist, FirebaseSyncAdapter } from 'columnist-db-core';
 
 const db = await Columnist.init('my-app', { schema });
 
@@ -32,7 +32,7 @@ await db.startSync('firebase');
 Sync with Supabase PostgreSQL database.
 
 ```typescript
-import { Columnist, SupabaseSyncAdapter } from '@columnist/core';
+import { Columnist, SupabaseSyncAdapter } from 'columnist-db-core';
 
 const db = await Columnist.init('my-app', { schema });
 
@@ -50,7 +50,7 @@ await db.startSync('supabase');
 Sync with any RESTful API.
 
 ```typescript
-import { Columnist, RESTfulSyncAdapter } from '@columnist/core';
+import { Columnist, RESTfulSyncAdapter } from 'columnist-db-core';
 
 const db = await Columnist.init('my-app', { schema });
 

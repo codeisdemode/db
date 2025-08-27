@@ -91,25 +91,81 @@ npm install columnist-db-plugin-openai-embedding
 ### Basic Usage
 
 ```typescript
-import { Columnist, defineTable } from 'columnist-db'
-// or for modular approach:
-import { Columnist } from 'columnist-db-core'
-import { defineTable } from 'columnist-db-core'
-import { z } from 'zod'
+import { ColumnistDB } from 'columnist-db-core'
 
-// Define your schema
-const schema = {
-  messages: defineTable()
-    .column("id", "number")
-    .column("content", "string") 
-    .column("user_id", "number")
-    .column("timestamp", "date")
-    .primaryKey("id")
-    .searchable("content")
-    .indexes("user_id", "timestamp")
-    .validate(z.object({
-      content: z.string().min(1),
-      user_id: z.number().positive(),
+// Initialize database with auto-initialization
+const db = await ColumnistDB.init('my-app', {
+  autoInitialize: true, // Automatically setup required tables
+  sync: {
+    enabled: false,     // Disable sync for simple use cases
+    autoRegisterDevices: false
+  },
+  vectorSearch: {
+    autoConfigure: true,
+    defaultDimension: 384
+  }
+})
+
+// Insert records
+await db.insert({ content: "Hello world", timestamp: new Date() }, 'messages')
+
+// Full-text search
+const results = await db.search("hello", { table: 'messages' })
+
+// Get all records
+const allMessages = await db.getAll('messages')
+```
+
+### Chat Application Example
+
+```typescript
+import { ColumnistDB } from 'columnist-db-core'
+
+// Chat message schema with vector embeddings
+const messageSchema = {
+  columns: {
+    id: "number",
+    role: "string",
+    content: "string",
+    timestamp: "date",
+    embedding: { type: 'vector', dimension: 384 }
+  },
+  primaryKey: "id",
+  searchableFields: ["content"],
+  secondaryIndexes: ["timestamp", "role"]
+}
+
+// Initialize with chat schema
+const db = await ColumnistDB.init('chat-memory', {
+  tables: {
+    messages: messageSchema  // Auto-create tables on init
+  },
+  autoInitialize: true,
+  sync: {
+    enabled: false
+  }
+})
+
+// Store chat messages
+await db.insert({
+  role: "user",
+  content: "Hello, how are you?",
+  timestamp: new Date(),
+  embedding: await generateEmbedding("Hello, how are you?")
+}, 'messages')
+
+// Semantic search for similar messages
+const similar = await db.search("greeting", { 
+  table: 'messages',
+  vectorField: 'embedding'
+})
+```
+
+### Advanced Schema Definition
+
+```typescript
+import { Columnist, defineTable } from 'columnist-db'
+import { z } from 'zod'
       timestamp: z.date().default(() => new Date())
     }))
     .build()
