@@ -76,7 +76,35 @@ await db.registerSyncAdapter('firebase', 'firebase', {
 
 await db.startSync('firebase')`
 
-const reactHookExampleCode = `import { useColumnist } from '@columnist/db/hooks'
+const mcpExampleCode = `import { ColumnistMCPServer } from 'columnist-db-core/mcp'
+
+// Configure MCP server with comprehensive options
+const mcpServer = new ColumnistMCPServer(db, {
+  port: 3001,
+  auth: {
+    type: 'jwt',
+    secret: process.env.MCP_JWT_SECRET,
+    expiresIn: '1h'
+  },
+  security: {
+    enableRateLimit: true,
+    maxRequestsPerMinute: 100,
+    allowedOrigins: ['http://localhost:3000'],
+    enableCors: true
+  },
+  tools: ['search', 'query', 'vector_search', 'analytics'],
+  logging: {
+    level: 'info',
+    enableAccessLog: true
+  }
+})
+
+await mcpServer.start()
+console.log('MCP server ready for AI integration')
+
+// Claude can now interact with your database via MCP protocol`
+
+const reactHookExampleCode = `import { useColumnist } from 'columnist-db-hooks'
 
 function ChatMessages({ chatId }) {
   const { data: messages, loading, error } = useColumnist(
@@ -95,6 +123,108 @@ function ChatMessages({ chatId }) {
     </div>
   )
 }`
+
+const chatAppMCPCode = `import { Columnist, defineTable } from 'columnist-db-core'
+import { ColumnistMCPServer } from 'columnist-db-core/mcp'
+
+// Define chat application schema
+const chatSchema = {
+  messages: defineTable()
+    .column('id', 'string')
+    .column('chat_id', 'string') 
+    .column('user_id', 'string')
+    .column('content', 'string')
+    .column('timestamp', 'date')
+    .column('metadata', 'object')
+    .primaryKey('id')
+    .searchable('content')
+    .indexes('chat_id', 'user_id', 'timestamp')
+    .build(),
+  
+  chats: defineTable()
+    .column('id', 'string')
+    .column('title', 'string')
+    .column('participants', 'array')
+    .column('created_at', 'date')
+    .column('last_activity', 'date')
+    .primaryKey('id')
+    .searchable('title')
+    .indexes('participants', 'last_activity')
+    .build(),
+    
+  users: defineTable()
+    .column('id', 'string')
+    .column('name', 'string')
+    .column('avatar', 'string')
+    .column('status', 'string')
+    .primaryKey('id')
+    .searchable('name')
+    .build()
+}
+
+// Initialize database
+const db = await Columnist.init('chat-app', { schema: chatSchema })
+await db.load()
+
+// Start MCP server for AI assistant integration
+const mcpServer = new ColumnistMCPServer(db, {
+  port: 3001,
+  auth: {
+    type: 'jwt',
+    secret: process.env.MCP_JWT_SECRET
+  },
+  security: {
+    enableRateLimit: true,
+    maxRequestsPerMinute: 200,
+    allowedOrigins: ['http://localhost:3000']
+  },
+  tools: ['search', 'query', 'vector_search', 'analytics'],
+  customTools: {
+    // AI can search chat history semantically
+    searchChatHistory: {
+      description: 'Search through chat messages using semantic search',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string' },
+          chatId: { type: 'string' },
+          limit: { type: 'number', default: 10 }
+        }
+      },
+      handler: async ({ query, chatId, limit = 10 }) => {
+        return await db.search(query, { 
+          chat_id: chatId, 
+          limit,
+          table: 'messages'
+        })
+      }
+    },
+    
+    // AI can analyze chat patterns
+    getChatInsights: {
+      description: 'Get insights about chat activity and patterns',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          chatId: { type: 'string' },
+          timeRange: { type: 'string', default: '7d' }
+        }
+      },
+      handler: async ({ chatId, timeRange }) => {
+        const messages = await db.find('messages', { chat_id: chatId })
+        // Return activity patterns, most active users, etc.
+        return {
+          messageCount: messages.length,
+          activeUsers: [...new Set(messages.map(m => m.user_id))].length,
+          peakHours: analyzeMessageTiming(messages)
+        }
+      }
+    }
+  }
+})
+
+await mcpServer.start()
+console.log('Chat app MCP server ready - AI can now assist with chat analysis!')`
 
 const apiReference = [
   {
@@ -135,6 +265,26 @@ const apiReference = [
       { name: "db.getStats()", description: "Get database statistics" },
       { name: "db.subscribe()", description: "Subscribe to changes" },
       { name: "db.transaction()", description: "Run transactional operations" }
+    ]
+  },
+  {
+    title: "MCP Integration",
+    methods: [
+      { name: "ColumnistMCPServer()", description: "Initialize MCP server for AI integration" },
+      { name: "mcpServer.start()", description: "Start the MCP server" },
+      { name: "mcpServer.stop()", description: "Stop the MCP server" },
+      { name: "mcpServer.addTool()", description: "Register custom tools for AI" },
+      { name: "mcpServer.getStatus()", description: "Get MCP server status" },
+      { name: "mcpServer.listTools()", description: "List available AI tools" }
+    ]
+  },
+  {
+    title: "React Hooks",
+    methods: [
+      { name: "useColumnist()", description: "Main hook for reactive queries" },
+      { name: "useLiveQuery()", description: "Real-time queries with auto-updates" },
+      { name: "useSearch()", description: "Semantic search with reactive results" },
+      { name: "useStats()", description: "Monitor database performance" }
     ]
   }
 ]
@@ -178,6 +328,8 @@ export default function Documentation() {
                 { id: "core-concepts", label: "Core Concepts", icon: Database },
                 { id: "search", label: "Semantic Search", icon: Search },
                 { id: "sync", label: "Synchronization", icon: Cloud },
+                { id: "mcp", label: "AI Integration (MCP)", icon: Brain },
+                { id: "chat-app", label: "Chat App with MCP", icon: Code },
                 { id: "react", label: "React Integration", icon: Code },
                 { id: "api", label: "API Reference", icon: BookOpen },
                 { id: "examples", label: "Examples", icon: Brain }
@@ -364,6 +516,20 @@ export default function Documentation() {
                     </div>
                   </div>
 
+                  <h2 className="text-2xl font-semibold mt-8 mb-4">MCP Integration</h2>
+                  <CodeBlock code={mcpExampleCode} language="typescript" />
+                  
+                  <div className="bg-primary/10 p-6 rounded-lg mt-6">
+                    <h3 className="text-lg font-semibold mb-2 flex items-center">
+                      <Brain className="h-5 w-5 mr-2 text-primary" />
+                      AI-Powered Applications
+                    </h3>
+                    <p className="text-sm">
+                      MCP (Model Context Protocol) enables AI assistants to directly interact with your database,
+                      providing powerful tools for search, querying, and data analysis.
+                    </p>
+                  </div>
+
                   <h2 className="text-2xl font-semibold mt-8 mb-4">Sync Features</h2>
                   
                   <ul className="list-disc list-inside space-y-2">
@@ -373,6 +539,70 @@ export default function Documentation() {
                     <li>Selective table synchronization</li>
                     <li>Offline queue with replay</li>
                   </ul>
+                </div>
+              </section>
+            )}
+
+            {/* Chat App with MCP */}
+            {activeSection === "chat-app" && (
+              <section>
+                <h1 className="text-3xl font-bold mb-6">Chat Application with MCP Integration</h1>
+                
+                <div className="prose prose-lg max-w-none">
+                  <p className="text-xl text-muted-foreground mb-8">
+                    Build intelligent chat applications that AI assistants can interact with using 
+                    the Model Context Protocol (MCP). This example shows a complete chat app setup.
+                  </p>
+
+                  <CodeBlock code={chatAppMCPCode} language="typescript" />
+
+                  <h2 className="text-2xl font-semibold mt-8 mb-4">AI Assistant Capabilities</h2>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                    <div className="bg-muted/50 p-4 rounded">
+                      <h4 className="font-semibold mb-2">Semantic Chat Search</h4>
+                      <p className="text-sm text-muted-foreground">
+                        AI can search through chat history using natural language queries
+                      </p>
+                    </div>
+                    
+                    <div className="bg-muted/50 p-4 rounded">
+                      <h4 className="font-semibold mb-2">Chat Analytics</h4>
+                      <p className="text-sm text-muted-foreground">
+                        Get insights on chat patterns, activity levels, and user behavior
+                      </p>
+                    </div>
+                    
+                    <div className="bg-muted/50 p-4 rounded">
+                      <h4 className="font-semibold mb-2">Real-time Querying</h4>
+                      <p className="text-sm text-muted-foreground">
+                        AI assistants can query live chat data as conversations happen
+                      </p>
+                    </div>
+                    
+                    <div className="bg-muted/50 p-4 rounded">
+                      <h4 className="font-semibold mb-2">Custom Tools</h4>
+                      <p className="text-sm text-muted-foreground">
+                        Define specialized tools for AI to interact with your chat data
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="bg-primary/10 p-6 rounded-lg">
+                    <h3 className="text-lg font-semibold mb-2 flex items-center">
+                      <Brain className="h-5 w-5 mr-2 text-primary" />
+                      Claude Integration Example
+                    </h3>
+                    <p className="text-sm mb-4">
+                      Once your MCP server is running, Claude can interact with your chat database:
+                    </p>
+                    <ul className="list-disc list-inside space-y-1 text-sm">
+                      <li>"Search for messages about project deadlines"</li>
+                      <li>"Show me chat activity for the last week"</li>
+                      <li>"Find conversations where users discussed pricing"</li>
+                      <li>"Analyze peak conversation times"</li>
+                    </ul>
+                  </div>
                 </div>
               </section>
             )}
