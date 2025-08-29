@@ -84,11 +84,14 @@ coverage/
 # Turbo
 .turbo
 
-# Monorepo packages directory (maintaining single package structure)
-packages/
+# Monorepo packages build outputs
+packages/*/dist/
+packages/*/node_modules/
 
 # Turborepo configuration (not used in single package structure)
 turbo.json
 
 # Showcase app node_modules
 showcase/node_modules/
+# clerk configuration (can include secrets)
+/.clerk/

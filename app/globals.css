@@ -1,6 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 @layer base {
   :root {
@@ -51,30 +49,47 @@
 
 @layer base {
   * {
-    @apply border-border;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
   }
   body {
-    @apply bg-background text-foreground;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
   }
 }
 
 .gradient-text {
-  @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/80;
+  background-clip: text;
+  color: transparent;
+  background-image: linear-gradient(to right, hsl(var(--primary)), hsl(var(--primary) / 0.8));
 }
 
 .gradient-bg {
-  @apply bg-gradient-to-r from-primary/10 to-primary/5;
+  background-image: linear-gradient(to right, hsl(var(--primary) / 0.1), hsl(var(--primary) / 0.05));
 }
 
 .code-window {
-  @apply rounded-lg overflow-hidden border border-border shadow-lg;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  border: 1px solid hsl(var(--border));
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 }
 
 .code-window-header {
-  @apply bg-muted/80 px-4 py-2 flex items-center border-b border-border;
+  background-color: hsl(var(--muted) / 0.8);
+  padding: 0.5rem 1rem;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid hsl(var(--border));
 }
 
 .code-window-body {
-  @apply bg-muted/30 p-4 overflow-x-auto font-mono text-sm;
+  background-color: hsl(var(--muted) / 0.3);
+  padding: 1rem;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.875rem;
 }
 

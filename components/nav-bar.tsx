@@ -9,6 +9,7 @@ import { UserButton } from "@/components/auth/user-button"
 import { SignInButton } from "@/components/auth/sign-in-button"
 import { SignUpButton } from "@/components/auth/sign-up-button"
 import { SignedIn, SignedOut } from "@clerk/nextjs"
+import { GlobalSearch } from "@/components/global-search"
 
 export function NavBar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -48,6 +49,7 @@ export function NavBar() {
           </div>
 
           <div className="hidden md:flex md:items-center md:space-x-4">
+            <GlobalSearch />
             <ThemeToggle />
             <Link href="https://github.com/columnist-io" className="text-foreground hover:text-primary">
               <Github className="h-5 w-5" />
@@ -74,6 +76,17 @@ export function NavBar() {
       {isMenuOpen && (
         <div className="md:hidden bg-background border-t border-border shadow-lg">
           <div className="px-4 pt-2 pb-4 space-y-1">
+            {/* Mobile search trigger */}
+            <button
+              onClick={() => {
+                setIsMenuOpen(false)
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))
+              }}
+              className="block w-full px-3 py-3 rounded-md text-base font-medium hover:bg-muted transition-colors text-left"
+            >
+              Search Documentation...
+            </button>
+            
             <Link href="/test" className="block px-3 py-3 rounded-md text-base font-medium hover:bg-muted transition-colors" onClick={() => setIsMenuOpen(false)}>
               Demo
             </Link>

@@ -1,0 +1,430 @@
+openapi: 3.0.3
+info:
+  title: Columnist MCP Server API
+  description: |
+    Model Context Protocol (MCP) server for Columnist database.
+    
+    Provides AI integration capabilities with secure access to database operations
+    including querying, searching, and data manipulation.
+  version: 1.2.0
+  contact:
+    name: Columnist Support
+    url: https://github.com/codeisdemode/columnist-db
+    email: support@columnist.live
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:3000/mcp
+    description: Local development server
+  - url: https://api.columnist.live/mcp
+    description: Production server
+
+tags:
+  - name: Discovery
+    description: Server discovery and capability information
+  - name: Resources
+    description: Database resource access and metadata
+  - name: Tools
+    description: Database operation tools and queries
+  - name: Authentication
+    description: Authentication and security endpoints
+
+paths:
+  /discovery:
+    post:
+      tags: [Discovery]
+      summary: Discover server capabilities
+      description: Returns information about the MCP server and its capabilities
+      operationId: mcpDiscovery
+      responses:
+        "200":
+          description: Server discovery information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoveryResponse'
+        "401":
+          $ref: '#/components/responses/UnauthorizedError'
+        "500":
+          $ref: '#/components/responses/ServerError'
+
+  /resources/list:
+    post:
+      tags: [Resources]
+      summary: List available resources
+      description: Returns a list of all available database resources (tables and schemas)
+      operationId: listResources
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: List of available resources
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceListResponse'
+        "401":
+          $ref: '#/components/responses/UnauthorizedError'
+        "403":
+          $ref: '#/components/responses/ForbiddenError'
+        "500":
+          $ref: '#/components/responses/ServerError'
+
+  /resources/read:
+    post:
+      tags: [Resources]
+      summary: Read resource content
+      description: Read the content of a specific database resource
+      operationId: readResource
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReadResourceRequest'
+      responses:
+        "200":
+          description: Resource content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceContentResponse'
+        "400":
+          $ref: '#/components/responses/BadRequestError'
+        "401":
+          $ref: '#/components/responses/UnauthorizedError'
+        "404":
+          $ref: '#/components/responses/NotFoundError'
+        "500":
+          $ref: '#/components/responses/ServerError'
+
+  /tools/call:
+    post:
+      tags: [Tools]
+      summary: Execute a database tool
+      description: Execute a database operation tool (query, search, insert, etc.)
+      operationId: callTool
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolCallRequest'
+      responses:
+        "200":
+          description: Tool execution result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolCallResponse'
+        "400":
+          $ref: '#/components/responses/BadRequestError'
+        "401":
+          $ref: '#/components/responses/UnauthorizedError'
+        "403":
+          $ref: '#/components/responses/ForbiddenError'
+        "429":
+          $ref: '#/components/responses/RateLimitError'
+        "500":
+          $ref: '#/components/responses/ServerError'
+
+components:
+  schemas:
+    DiscoveryResponse:
+      type: object
+      properties:
+        name:
+          type: string
+          example: columnist-mcp-server
+        version:
+          type: string
+          example: 1.2.0
+        capabilities:
+          type: object
+          properties:
+            resources:
+              type: object
+            tools:
+              type: object
+
+    ResourceListResponse:
+      type: object
+      properties:
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/MCPResource'
+
+    MCPResource:
+      type: object
+      properties:
+        uri:
+          type: string
+          example: mcp://columnist/my-database/messages/
+        name:
+          type: string
+          example: messages Table
+        description:
+          type: string
+          example: All records in the messages table
+        mimeType:
+          type: string
+          example: application/json
+
+    ReadResourceRequest:
+      type: object
+      required: [uri]
+      properties:
+        uri:
+          type: string
+          description: URI of the resource to read
+          example: mcp://columnist/my-database/messages/
+
+    ResourceContentResponse:
+      type: object
+      properties:
+        contents:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceContent'
+
+    ResourceContent:
+      type: object
+      properties:
+        uri:
+          type: string
+        mimeType:
+          type: string
+        content:
+          type: string
+
+    ToolCallRequest:
+      type: object
+      required: [name, arguments]
+      properties:
+        name:
+          type: string
+          enum: [columnist_query, columnist_search, columnist_insert, columnist_update, columnist_delete]
+          description: Name of the tool to execute
+        arguments:
+          type: object
+          description: Tool-specific arguments
+
+    ToolCallResponse:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContentItem'
+
+    ContentItem:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [text]
+        text:
+          type: string
+
+    # Tool-specific request schemas
+    QueryArguments:
+      type: object
+      required: [database, table]
+      properties:
+        database:
+          type: string
+          example: my-database
+        table:
+          type: string
+          example: messages
+        where:
+          type: object
+          description: Filter conditions
+        orderBy:
+          type: object
+          properties:
+            field:
+              type: string
+            direction:
+              type: string
+              enum: [asc, desc]
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 1000
+        offset:
+          type: integer
+          minimum: 0
+
+    SearchArguments:
+      type: object
+      required: [database, table, query]
+      properties:
+        database:
+          type: string
+        table:
+          type: string
+        query:
+          type: string
+          description: Search query string
+        filters:
+          type: object
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+
+    InsertArguments:
+      type: object
+      required: [database, table, records]
+      properties:
+        database:
+          type: string
+        table:
+          type: string
+        records:
+          type: array
+          items:
+            type: object
+          minItems: 1
+          maxItems: 100
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  responses:
+    BadRequestError:
+      description: Bad request - invalid parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    UnauthorizedError:
+      description: Unauthorized - authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ForbiddenError:
+      description: Forbidden - insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFoundError:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RateLimitError:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        code:
+          type: string
+          description: Error code
+        details:
+          type: object
+          description: Additional error details
+
+# Tool definitions for MCP protocol
+mcp:
+  tools:
+    - name: columnist_query
+      description: Query database records with filtering and sorting
+      inputSchema:
+        type: object
+        properties:
+          database:
+            type: string
+            description: Name of the database
+          table:
+            type: string
+            description: Name of the table to query
+          where:
+            type: object
+            description: Filter conditions (optional)
+          orderBy:
+            type: object
+            description: Sorting configuration (optional)
+          limit:
+            type: integer
+            description: Maximum number of records to return (optional)
+          offset:
+            type: integer
+            description: Number of records to skip (optional)
+        required: [database, table]
+
+    - name: columnist_search
+      description: Full-text search across database records
+      inputSchema:
+        type: object
+        properties:
+          database:
+            type: string
+            description: Name of the database
+          table:
+            type: string
+            description: Name of the table to search
+          query:
+            type: string
+            description: Search query string
+          filters:
+            type: object
+            description: Additional filter conditions (optional)
+          limit:
+            type: integer
+            description: Maximum number of results to return (optional)
+        required: [database, table, query]
+
+    - name: columnist_insert
+      description: Insert new records into a database table
+      inputSchema:
+        type: object
+        properties:
+          database:
+            type: string
+            description: Name of the database
+          table:
+            type: string
+            description: Name of the table
+          records:
+            type: array
+            items:
+              type: object
+            description: Records to insert
+        required: [database, table, records]
+
+security:
+  - BearerAuth: []
+  - ApiKeyAuth: []

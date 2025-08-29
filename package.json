@@ -41,14 +41,19 @@
     "publish:packages": "npm publish --workspace=packages/core --workspace=packages/hooks --workspace=packages/plugins/openai-embedding --workspace=packages/tables/notes --workspace=packages/tables/tasks"
   },
   "devDependencies": {
-    "turbo": "^2.0.0",
-    "typescript": "^5.0.0",
     "@types/node": "^20.0.0",
     "jest": "^29.0.0",
-    "ts-jest": "^29.0.0"
+    "ts-jest": "^29.0.0",
+    "turbo": "^2.0.0",
+    "typescript": "^5.0.0"
   },
   "engines": {
     "node": ">=18"
   },
-  "packageManager": "npm@10.0.0"
+  "packageManager": "npm@10.0.0",
+  "dependencies": {
+    "@tailwindcss/postcss": "^4.1.12",
+    "autoprefixer": "^10.4.21",
+    "tailwindcss": "^4.1.12"
+  }
 }
